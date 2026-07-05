@@ -862,7 +862,6 @@ function createTimelineAlert(title, message, severity, location) {
     activeAlerts.unshift(alert); // newest first
 
     renderTimelineFeed();
-    renderAlertsPreview();
 }
 
 function renderTimelineFeed(filterType = 'all') {
@@ -908,31 +907,6 @@ function renderTimelineFeed(filterType = 'all') {
             </div>
         `;
         container.appendChild(card);
-    });
-}
-
-function renderAlertsPreview() {
-    const container = document.getElementById('alerts-preview-feed');
-    container.innerHTML = '';
-
-    const warnings = activeAlerts.slice(0, 1); // latest alert only
-    if (warnings.length === 0) {
-        container.innerHTML = '<div class="empty-preview-state">No alerts recorded in the current session.</div>';
-        return;
-    }
-
-    warnings.forEach(alert => {
-        const div = document.createElement('div');
-        div.className = `alert-item-mini severity-${alert.severity}`;
-        div.innerHTML = `
-            <div class="alert-mini-header">
-                <span class="alert-badge severity-${alert.severity}">${alert.severity}</span>
-                <span class="alert-mini-time">${alert.timestamp}</span>
-            </div>
-            <span class="alert-mini-msg">${alert.title}</span>
-            <span class="alert-mini-loc">${alert.location}</span>
-        `;
-        container.appendChild(div);
     });
 }
 

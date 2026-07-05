@@ -891,57 +891,7 @@ input#sprinkler-toggle:checked+.slider:before {
     }
 }
 
-/* Live Alert Preview Box */
-.alert-preview-card {
-    min-height: 150px;
-    display: flex;
-    flex-direction: column;
-}
 
-.preview-feed {
-    margin-top: 0.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.alert-item-mini {
-    padding: 0.75rem;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.02);
-    border-left: 3px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
-.alert-item-mini.severity-info {
-    border-left-color: var(--color-accent);
-}
-
-.alert-item-mini.severity-low {
-    border-left-color: var(--color-safe);
-}
-
-.alert-item-mini.severity-medium {
-    border-left-color: var(--color-warn);
-}
-
-.alert-item-mini.severity-high {
-    border-left-color: var(--color-critical);
-}
-
-.alert-mini-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.75rem;
-}
-
-.alert-mini-time {
-    font-family: var(--font-mono);
-    color: var(--text-muted);
-}
 
 .alert-badge {
     padding: 1px 6px;
@@ -972,25 +922,7 @@ input#sprinkler-toggle:checked+.slider:before {
     color: var(--color-critical);
 }
 
-.alert-mini-msg {
-    font-size: 0.8rem;
-    color: var(--text-primary);
-}
 
-.alert-mini-loc {
-    font-size: 0.72rem;
-    color: var(--text-secondary);
-}
-
-.empty-preview-state {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100px;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    font-style: italic;
-}
 
 
 /* 2. LIVE SENSOR DATA PAGE */
