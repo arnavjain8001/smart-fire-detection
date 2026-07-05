@@ -2,29 +2,29 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --bg-base: #e6e6e6;
-    --bg-surface: #FFFFFF;
-    --bg-panel: #FFFFFF;
-    --border-color: #E6EAF0;
+    --bg-base: #18181B; /* professional dark-grey background */
+    --bg-surface: #E4E4E7; /* soft grey for surfaces/cards */
+    --bg-panel: #E4E4E7; /* soft grey for panels */
+    --border-color: #D4D4D8; /* matching soft grey border */
     --border-glow-red: rgba(239, 68, 68, 0.4);
     --border-glow-yellow: rgba(245, 158, 11, 0.4);
     --border-glow-green: rgba(34, 197, 94, 0.4);
 
-    --text-primary: #1F2937;
-    --text-secondary: #6B7280;
-    --text-muted: #9CA3AF;
+    --text-primary: #09090B; /* dark grey/black for text */
+    --text-secondary: #27272A; /* dark grey/black secondary text */
+    --text-muted: #52525B; /* dark grey muted text for high contrast */
 
     /* Safety Palette */
-    --color-safe: #22C55E;
-    --color-safe-bg: rgba(34, 197, 94, 0.1);
-    --color-warn: #F59E0B;
-    --color-warn-bg: rgba(245, 158, 11, 0.1);
-    --color-critical: #EF4444;
-    --color-critical-bg: rgba(239, 68, 68, 0.1);
+    --color-safe: #15803d; /* Dark green for safe text on soft grey background */
+    --color-safe-bg: rgba(22, 163, 74, 0.15);
+    --color-warn: #b45309; /* Dark orange/amber for warn text on soft grey */
+    --color-warn-bg: rgba(217, 119, 6, 0.15);
+    --color-critical: #b91c1c; /* Dark red for critical text on soft grey */
+    --color-critical-bg: rgba(220, 38, 38, 0.15);
 
     /* Technical Palette */
-    --color-accent: #3B82F6;
-    --color-accent-bg: rgba(59, 130, 246, 0.1);
+    --color-accent: #1d4ed8; /* Darker accent blue for soft grey background */
+    --color-accent-bg: rgba(37, 99, 235, 0.15);
     --grid-gap: 1.25rem;
 
     --font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -59,8 +59,8 @@ body::before {
     width: 100%;
     height: 100%;
     background-image:
-        linear-gradient(rgba(0, 0, 0, 0.015) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(0, 0, 0, 0.015) 1px, transparent 1px);
+        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
     background-size: 40px 40px;
     z-index: -1;
     pointer-events: none;
@@ -105,12 +105,12 @@ body::before {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #E6EAF0;
+    background: #3F3F46;
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #D1D5DB;
+    background: #52525B;
 }
 
 /* Top Navigation Bar */
@@ -119,7 +119,7 @@ body::before {
     top: 0;
     width: 100%;
     height: 70px;
-    background: rgba(255, 255, 255, 0.85);
+    background: rgba(228, 228, 231, 0.85);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-color);
     display: flex;
@@ -255,7 +255,7 @@ body::before {
     align-items: center;
     gap: 0.5rem;
     padding: 0.25rem 0.65rem;
-    background: #FFFFFF;
+    background: #F4F4F5;
     border: 1px solid var(--border-color);
     border-radius: 20px;
     cursor: pointer;
@@ -263,7 +263,7 @@ body::before {
 }
 
 .user-profile-info:hover {
-    background: var(--bg-base);
+    background: #D4D4D8;
     border-color: rgba(59, 130, 246, 0.3);
 }
 
@@ -590,7 +590,7 @@ body::before {
 }
 
 .btn-secondary {
-    background: #FFFFFF;
+    background: #F4F4F5;
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 0.75rem 1rem;
@@ -749,7 +749,7 @@ body::before {
     justify-content: space-between;
     align-items: center;
     padding: 0.5rem 0.75rem;
-    background: rgba(255, 255, 255, 0.015);
+    background: rgba(0, 0, 0, 0.025);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 0.82rem;
@@ -785,7 +785,7 @@ body::before {
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem;
-    background: rgba(255, 255, 255, 0.015);
+    background: rgba(0, 0, 0, 0.025);
     border: 1px solid var(--border-color);
     border-radius: 8px;
 }
@@ -1025,7 +1025,7 @@ input#sprinkler-toggle:checked+.slider:before {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    background: rgba(255, 255, 255, 0.015);
+    background: rgba(0, 0, 0, 0.025);
     padding: 0.75rem;
     border-radius: 8px;
     border: 1px solid var(--border-color);
@@ -1086,7 +1086,7 @@ input#sprinkler-toggle:checked+.slider:before {
 }
 
 .btn-pill {
-    background: rgba(255, 255, 255, 0.03);
+    background: #F4F4F5;
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
     padding: 0.35rem 0.85rem;
@@ -1099,12 +1099,12 @@ input#sprinkler-toggle:checked+.slider:before {
 
 .btn-pill:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.06);
+    background: #D4D4D8;
 }
 
 .btn-pill.active {
-    background: rgba(6, 182, 212, 0.15);
-    color: #fff;
+    background: var(--color-accent);
+    color: #FFFFFF;
     border-color: var(--color-accent);
 }
 
@@ -1373,7 +1373,7 @@ input#sprinkler-toggle:checked+.slider:before {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    background: rgba(255, 255, 255, 0.015);
+    background: rgba(0, 0, 0, 0.025);
     padding: 1.25rem;
     border-radius: 12px;
     border: 1px solid var(--border-color);
@@ -1559,7 +1559,7 @@ input#sprinkler-toggle:checked+.slider:before {
 }
 
 .history-table th {
-    background: rgba(255, 255, 255, 0.02);
+    background: rgba(0, 0, 0, 0.04);
     font-family: var(--font-sans);
     font-weight: 600;
     font-size: 0.85rem;
@@ -1584,7 +1584,7 @@ input#sprinkler-toggle:checked+.slider:before {
 }
 
 .history-table tbody tr:hover {
-    background: rgba(255, 255, 255, 0.015);
+    background: rgba(0, 0, 0, 0.02);
 }
 
 .history-table td.cell-mono {
@@ -1677,7 +1677,7 @@ input#sprinkler-toggle:checked+.slider:before {
 
 .profile-input {
     flex-grow: 1;
-    background: #FFFFFF;
+    background: #F4F4F5;
     border: 1px solid var(--border-color);
     padding: 0.65rem 0.85rem;
     color: var(--text-primary);
@@ -1690,11 +1690,11 @@ input#sprinkler-toggle:checked+.slider:before {
 
 .profile-input:focus:not([disabled]) {
     border-color: var(--color-accent);
-    background: #FFFFFF;
+    background: #F4F4F5;
 }
 
 .btn-edit {
-    background: #FFFFFF;
+    background: #F4F4F5;
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
     width: 40px;
@@ -1909,7 +1909,7 @@ input#sprinkler-toggle:checked+.slider:before {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    background: #F7F9FC;
+    background: #F4F4F5;
     padding: 0.75rem;
     border-radius: 8px;
     border: 1px solid var(--border-color);
