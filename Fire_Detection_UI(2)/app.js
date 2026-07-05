@@ -39,8 +39,26 @@ let autoMode = true;
 let sprinklerActive = false;
 let emergencyOverride = false;
 
-// History logs & alerts databases
-let historyLogs = [];
+// Simulated Firebase database integration
+const firebaseDb = {
+    ref: function(path) {
+        return {
+            push: function(data) {
+                let list = JSON.parse(localStorage.getItem(path) || '[]');
+                list.unshift(data); // latest first
+                localStorage.setItem(path, JSON.stringify(list));
+                return { key: 'mock-key-' + Date.now() };
+            },
+            get: function() {
+                return JSON.parse(localStorage.getItem(path) || '[]');
+            },
+            set: function(data) {
+                localStorage.setItem(path, JSON.stringify(data));
+            }
+        };
+    }
+};
+
 let activeAlerts = [];
 let incidentStage = 0; // 0=None, 1=Building Up, 2=Critical peak, 3=Cooldown
 
@@ -49,11 +67,6 @@ let mainChart = null;
 let tempChart = null;
 let smokeChart = null;
 let flameChart = null;
-
-// History Pagination State
-let historyPage = 1;
-const historyPageSize = 10;
-let filteredLogs = [];
 
 // Chart Data buffers (sliding window of last 20 ticks)
 const maxTicks = 20;
@@ -69,7 +82,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(updateClock, 1000);
     
     // Seed initial history logs
-    seedHistoryLogs();
+    seedIncidentsHistory();
 
     // Initialize Charts
     initCharts();
@@ -81,8 +94,8 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById('sprinkler-toggle').checked = sprinklerActive;
     document.getElementById('auto-mode-toggle').checked = autoMode;
 
-    // Load initial history table
-    applyHistoryFilters();
+    // Load initial history view
+    renderIncidentsHistory();
 
     // Close user dropdown menu when clicking outside
     window.addEventListener('click', (e) => {
@@ -181,9 +194,7 @@ function saveUsernameChanges() {
     editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
 
     // Log the change
-    const timestamp = new Date().toLocaleTimeString([], { hour12: false });
-    const datestamp = new Date().toLocaleDateString();
-    addHistoryLog(datestamp, timestamp, 'SAFE', 'System Controls', `Profile Updated`, 'SUCCESS');
+    addResponseActionLog('PROFILE', 'Username updated.');
 }
 
 function triggerPhotoChange() {
@@ -199,9 +210,7 @@ function triggerPhotoChange() {
     avatar2.style.backgroundColor = randomColor;
     avatar2.style.color = '#06080c';
 
-    const timestamp = new Date().toLocaleTimeString([], { hour12: false });
-    const datestamp = new Date().toLocaleDateString();
-    addHistoryLog(datestamp, timestamp, 'SAFE', 'System Controls', `Photo updated`, 'SUCCESS');
+    addResponseActionLog('PROFILE', 'Photo updated.');
 }
 
 function triggerLogout() {
@@ -395,18 +404,16 @@ function handleStateTransition(fromState, toState) {
         msg = `Hazard levels exceeded critical limits! Temp: ${sensors.temp.val.toFixed(1)}°C, Smoke: ${sensors.smoke.val.toFixed(1)}%, Flame: ${sensors.flame.val.toFixed(2)} W/m²`;
         
         // Add log
-        addHistoryLog(datestamp, timestamp, 'CRITICAL', 'Multi-Sensor Array', 'Automatic water deployment', 'SUCCESS');
+        recordFireIncident();
         addResponseActionLog('ALARM', 'Siren Array Activated - Building Evacuation Command Sent.');
     } 
     else if (toState === 'WARNING') {
         title = 'SAFETY ENVELOPE WARNING';
         msg = `Sensors approaching limits. Inspect Area.`;
-        addHistoryLog(datestamp, timestamp, 'WARNING', 'Multi-Sensor Array', 'Integrity deviation warning', 'SUCCESS');
     } 
     else if (toState === 'SAFE' && fromState === 'CRITICAL') {
         title = 'THREAT DISARMED';
         msg = `All safety checks returned normal. Threat neutralized.`;
-        addHistoryLog(datestamp, timestamp, 'SAFE', 'System Controls', 'Restored to safe range', 'SUCCESS');
         
         // Turn off sprinklers if auto is checked
         if (autoMode && sprinklerActive) {
@@ -470,39 +477,50 @@ function updateInterfaceReadouts() {
         badge.style.display = 'none';
     }
 
-    // 5. Update Sprinkler status visual card
+    // 5. Update Sprinkler status visual card (removed from UI, wrapped to prevent errors)
     const sprinklerCard = document.getElementById('sprinkler-status-card');
-    const sprinklerTitle = document.getElementById('sprinkler-status-title');
-    const sprinklerLbl = document.getElementById('sprinkler-status-lbl');
-    const warningIndicator = document.getElementById('emergency-warning-indicator');
-    const threatLevel = document.getElementById('emergency-threat-level');
-    
-    sprinklerCard.className = 'glass-panel sprinkler-card';
-    if (sprinklerActive) {
-        sprinklerCard.classList.add('active');
-        if (systemState === 'CRITICAL') sprinklerCard.classList.add('alert-danger');
-        sprinklerTitle.textContent = 'Sprinkler Pump Running';
-        sprinklerLbl.textContent = 'DISCHARGING WATER';
-    } else {
-        sprinklerTitle.textContent = 'Sprinkler Pump Standby';
-        sprinklerLbl.textContent = 'DEACTIVATED';
+    if (sprinklerCard) {
+        const sprinklerTitle = document.getElementById('sprinkler-status-title');
+        const sprinklerLbl = document.getElementById('sprinkler-status-lbl');
+        
+        sprinklerCard.className = 'glass-panel sprinkler-card';
+        if (sprinklerActive) {
+            sprinklerCard.classList.add('active');
+            if (systemState === 'CRITICAL') sprinklerCard.classList.add('alert-danger');
+            if (sprinklerTitle) sprinklerTitle.textContent = 'Sprinkler Pump Running';
+            if (sprinklerLbl) sprinklerLbl.textContent = 'DISCHARGING WATER';
+        } else {
+            if (sprinklerTitle) sprinklerTitle.textContent = 'Sprinkler Pump Standby';
+            if (sprinklerLbl) sprinklerLbl.textContent = 'DEACTIVATED';
+        }
     }
 
-    if (systemState === 'CRITICAL') {
-        warningIndicator.textContent = 'HAZARD ACTIVE';
-        warningIndicator.style.color = 'var(--color-critical)';
-        threatLevel.textContent = 'CRITICAL';
-        threatLevel.style.color = 'var(--color-critical)';
-    } else if (systemState === 'WARNING') {
-        warningIndicator.textContent = 'INTEGRITY ABNORMAL';
-        warningIndicator.style.color = 'var(--color-warn)';
-        threatLevel.textContent = 'WARNING';
-        threatLevel.style.color = 'var(--color-warn)';
-    } else {
-        warningIndicator.textContent = 'NOMINAL';
-        warningIndicator.style.color = 'var(--color-safe)';
-        threatLevel.textContent = 'SAFE';
-        threatLevel.style.color = 'var(--color-safe)';
+    const warningIndicator = document.getElementById('emergency-warning-indicator');
+    if (warningIndicator) {
+        if (systemState === 'CRITICAL') {
+            warningIndicator.textContent = 'HAZARD ACTIVE';
+            warningIndicator.style.color = 'var(--color-critical)';
+        } else if (systemState === 'WARNING') {
+            warningIndicator.textContent = 'INTEGRITY ABNORMAL';
+            warningIndicator.style.color = 'var(--color-warn)';
+        } else {
+            warningIndicator.textContent = 'NOMINAL';
+            warningIndicator.style.color = 'var(--color-safe)';
+        }
+    }
+
+    const threatLevel = document.getElementById('emergency-threat-level');
+    if (threatLevel) {
+        if (systemState === 'CRITICAL') {
+            threatLevel.textContent = 'CRITICAL';
+            threatLevel.style.color = 'var(--color-critical)';
+        } else if (systemState === 'WARNING') {
+            threatLevel.textContent = 'WARNING';
+            threatLevel.style.color = 'var(--color-warn)';
+        } else {
+            threatLevel.textContent = 'SAFE';
+            threatLevel.style.color = 'var(--color-safe)';
+        }
     }
 
     // 6. Sync UI Checkbox indicators
@@ -540,7 +558,7 @@ function updateSensorPanelHTML(id, icon, unit) {
     if (detVal) {
         detVal.textContent = data.val.toFixed(id === 'flame' ? 2 : 1);
         detPeak.textContent = `${data.peak.toFixed(id === 'flame' ? 2 : 1)}${unit}`;
-        detThresh.textContent = `${thresholds[id].toFixed(id === 'flame' ? 2 : 1)}${unit}`;
+        if (detThresh) detThresh.textContent = `${thresholds[id].toFixed(id === 'flame' ? 2 : 1)}${unit}`;
 
         detDot.className = 'status-dot';
         if (data.status === 'CRITICAL') {
@@ -600,9 +618,7 @@ function toggleAutoMode(active) {
     const action = active ? 'ENABLED' : 'DISABLED';
     addResponseActionLog('MODE-CHANGE', `Auto Fire Defense ${action}.`);
     
-    const timestamp = new Date().toLocaleTimeString([], { hour12: false });
-    const datestamp = new Date().toLocaleDateString();
-    addHistoryLog(datestamp, timestamp, 'SAFE', 'System Controls', `Auto mode: ${action}`, 'SUCCESS');
+
 }
 
 // Execute actuator state shifts
@@ -615,8 +631,7 @@ function activateSprinkler(active, source = 'MANUAL-OVERRIDE') {
     const actionText = active ? 'Water discharge initiated' : 'Discharge terminated';
     const logSeverity = active ? (systemState === 'CRITICAL' ? 'CRITICAL' : 'WARNING') : 'SAFE';
 
-    // Log the change
-    addHistoryLog(datestamp, timestamp, logSeverity, 'Sprinkler Core Actuator', actionText, 'SUCCESS');
+
     
     // Trigger alert or info log
     addResponseActionLog(active ? 'ACTUATOR-ON' : 'ACTUATOR-OFF', `Sprinklers ${active ? 'activated' : 'closed'} via ${source}`);
@@ -650,20 +665,23 @@ function triggerManualOverride() {
     }
 }
 
-// Settings Threshold Sliders Event Handler
+// Settings Threshold Sliders Event Handler (disabled since page-settings was removed)
 function updateThresholdsFromSliders() {
     const tempSl = document.getElementById('threshold-temp-range');
     const smokeSl = document.getElementById('threshold-smoke-range');
     const flameSl = document.getElementById('threshold-flame-range');
 
-    thresholds.temp = parseFloat(tempSl.value);
-    thresholds.smoke = parseFloat(smokeSl.value);
-    thresholds.flame = parseFloat(flameSl.value) / 100.0; // scale down slider 20-500 -> 0.2 - 5.0
+    if (tempSl) thresholds.temp = parseFloat(tempSl.value);
+    if (smokeSl) thresholds.smoke = parseFloat(smokeSl.value);
+    if (flameSl) thresholds.flame = parseFloat(flameSl.value) / 100.0;
 
-    // Readout indicators
-    document.getElementById('lbl-temp-threshold').textContent = thresholds.temp;
-    document.getElementById('lbl-smoke-threshold').textContent = thresholds.smoke;
-    document.getElementById('lbl-flame-threshold').textContent = thresholds.flame.toFixed(2);
+    const lblTemp = document.getElementById('lbl-temp-threshold');
+    const lblSmoke = document.getElementById('lbl-smoke-threshold');
+    const lblFlame = document.getElementById('lbl-flame-threshold');
+
+    if (lblTemp) lblTemp.textContent = thresholds.temp;
+    if (lblSmoke) lblSmoke.textContent = thresholds.smoke;
+    if (lblFlame) lblFlame.textContent = thresholds.flame.toFixed(2);
 
     evaluateSafetyThresholds();
     updateInterfaceReadouts();
@@ -705,15 +723,25 @@ function resetEntireSystemState() {
     sensors.smoke.min = 12.1;
     sensors.flame.min = 0.0;
 
-    // Reset sliders
-    document.getElementById('threshold-temp-range').value = 60;
-    document.getElementById('threshold-smoke-range').value = 40;
-    document.getElementById('threshold-flame-range').value = 150;
+    // Reset thresholds and elements
+    thresholds.temp = 60.0;
+    thresholds.smoke = 40.0;
+    thresholds.flame = 1.50;
+
+    const tempSl = document.getElementById('threshold-temp-range');
+    const smokeSl = document.getElementById('threshold-smoke-range');
+    const flameSl = document.getElementById('threshold-flame-range');
+
+    if (tempSl) tempSl.value = 60;
+    if (smokeSl) smokeSl.value = 40;
+    if (flameSl) flameSl.value = 150;
     updateThresholdsFromSliders();
 
     const overrideBtn = document.getElementById('emergency-override-btn');
-    overrideBtn.classList.remove('active');
-    overrideBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> Emergency Override`;
+    if (overrideBtn) {
+        overrideBtn.classList.remove('active');
+        overrideBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> Emergency Override`;
+    }
 
     evaluateSafetyThresholds();
     updateInterfaceReadouts();
@@ -865,126 +893,148 @@ function addResponseActionLog(type, details) {
 }
 
 
-// History Database Manager
-function addHistoryLog(date, time, severity, sensor, action, status) {
-    historyLogs.unshift({
-        date,
-        time,
-        severity, // 'SAFE', 'WARNING', 'CRITICAL'
-        sensor,
-        action,
-        status // 'SUCCESS', 'TRIGGERED', 'PENDING'
-    });
-    
-    applyHistoryFilters();
+// Fire Incident History Database Manager (LocalStorage/Firebase-backed)
+function seedIncidentsHistory() {
+    let incidents = firebaseDb.ref('fire_incidents').get();
+    if (incidents.length === 0) {
+        incidents = [
+            {
+                date: '05 July 2026',
+                fireTime: '10:42 AM',
+                alertTime: '10:42:08 AM',
+                sensors: { flame: true, smoke: true, temp: true },
+                status: 'Alert Sent Successfully'
+            },
+            {
+                date: '01 July 2026',
+                fireTime: '11:04 AM',
+                alertTime: '11:04:15 AM',
+                sensors: { flame: false, smoke: true, temp: true },
+                status: 'Alert Sent Successfully'
+            }
+        ];
+        firebaseDb.ref('fire_incidents').set(incidents);
+    }
 }
 
-function seedHistoryLogs() {
-    const today = new Date().toLocaleDateString();
+function recordFireIncident() {
+    const now = new Date();
     
-    // Mock seed safety archives
-    historyLogs = [
-        { date: today, time: '10:14:22', severity: 'SAFE', sensor: 'Calibration Core', action: 'Threshold limits synced', status: 'SUCCESS' },
-        { date: today, time: '08:00:00', severity: 'SAFE', sensor: 'ESP32 Device Node', action: 'Connected to WiFi AP', status: 'SUCCESS' },
-        { date: '2026-07-01', time: '18:32:10', severity: 'WARNING', sensor: 'Thermal S-TEMP-001', action: 'Sector Warning alert issued', status: 'TRIGGERED' },
-        { date: '2026-07-01', time: '15:20:00', severity: 'SAFE', sensor: 'Water Pump Actuator', action: 'Sprinkler deployment check ok', status: 'SUCCESS' },
-        { date: '2026-07-01', time: '11:05:43', severity: 'CRITICAL', sensor: 'Flame S-FLAM-003', action: 'Automatic water deployment', status: 'SUCCESS' },
-        { date: '2026-07-01', time: '11:05:42', severity: 'CRITICAL', sensor: 'Photoelectric Smoke S-SMOK-002', action: 'Sirens triggered building core', status: 'SUCCESS' },
-        { date: '2026-07-01', time: '11:04:15', severity: 'WARNING', sensor: 'Thermal S-TEMP-001', action: 'Thermal deviation alert', status: 'TRIGGERED' }
-    ];
+    // Format Date: 05 July 2026
+    const fireDate = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+    
+    // Format Fire Time: 10:42 AM
+    const fireTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+    
+    // Format Alert Time: 10:42:08 AM
+    const alertTime = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+
+    // Determine active sensors: check which ones are above/equal to thresholds
+    const tempActive = sensors.temp.val >= thresholds.temp || sensors.temp.status === 'CRITICAL' || sensors.temp.status === 'WARNING';
+    const smokeActive = sensors.smoke.val >= thresholds.smoke || sensors.smoke.status === 'CRITICAL' || sensors.smoke.status === 'WARNING';
+    const flameActive = sensors.flame.val >= thresholds.flame || sensors.flame.status === 'CRITICAL' || sensors.flame.status === 'WARNING';
+
+    // Fallback if none are active (e.g. manual override or diagnostic test drill)
+    let isTempActive = tempActive;
+    let isSmokeActive = smokeActive;
+    let isFlameActive = flameActive;
+    if (!isTempActive && !isSmokeActive && !isFlameActive) {
+        isTempActive = true;
+        isSmokeActive = true;
+        isFlameActive = true;
+    }
+
+    const incident = {
+        date: fireDate,
+        fireTime: fireTime,
+        alertTime: alertTime,
+        sensors: {
+            flame: isFlameActive,
+            smoke: isSmokeActive,
+            temp: isTempActive
+        },
+        status: 'Alert Sent Successfully'
+    };
+
+    // Store in LocalStorage (simulated Firebase)
+    firebaseDb.ref('fire_incidents').push(incident);
+
+    // Re-render History view
+    renderIncidentsHistory();
 }
 
-function renderHistoryTable() {
-    const tbody = document.getElementById('history-table-body');
-    tbody.innerHTML = '';
+function renderIncidentsHistory() {
+    const container = document.getElementById('incident-history-list');
+    if (!container) return;
 
-    const start = (historyPage - 1) * historyPageSize;
-    const end = Math.min(start + historyPageSize, filteredLogs.length);
-    const paginated = filteredLogs.slice(start, end);
+    container.innerHTML = '';
 
-    if (paginated.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted); font-style:italic;">No log archives found matching current filter definitions.</td></tr>`;
-        document.getElementById('history-pagination-info').textContent = 'Showing 0-0 of 0 logs';
+    const incidents = firebaseDb.ref('fire_incidents').get();
+
+    if (incidents.length === 0) {
+        container.innerHTML = `
+            <div class="glass-panel" style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted); font-style: italic;">
+                No fire incidents recorded in the safety logs.
+            </div>
+        `;
         return;
     }
 
-    paginated.forEach(log => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${log.date}</td>
-            <td class="cell-mono">${log.time}</td>
-            <td>
-                <span class="alert-badge severity-${log.severity === 'CRITICAL' ? 'high' : (log.severity === 'WARNING' ? 'medium' : 'low')}">
-                    ${log.severity}
-                </span>
-            </td>
-            <td>${log.sensor}</td>
-            <td>${log.action}</td>
-            <td style="font-weight:700; color:${log.status === 'SUCCESS' ? 'var(--color-safe)' : 'var(--color-warn)'}">${log.status}</td>
-        `;
-        tbody.appendChild(tr);
-    });
-
-    document.getElementById('history-pagination-info').textContent = `Showing ${start + 1}-${end} of ${filteredLogs.length} logs`;
-
-    // Disable buttons if bounds hit
-    document.getElementById('history-prev-btn').disabled = (historyPage === 1);
-    document.getElementById('history-next-btn').disabled = (end >= filteredLogs.length);
-}
-
-function applyHistoryFilters() {
-    const severity = document.getElementById('history-severity-filter').value;
-    const sensor = document.getElementById('history-sensor-filter').value;
-    const dateVal = document.getElementById('history-date-filter').value;
-
-    filteredLogs = historyLogs.filter(log => {
-        // Severity Filter
-        if (severity !== 'all' && log.severity !== severity) return false;
+    incidents.forEach((incident, index) => {
+        // Calculate original incident number (latest incident has the highest number)
+        const incidentNumber = incidents.length - index;
+        const card = document.createElement('div');
+        card.className = 'glass-panel incident-card';
         
-        // Sensor Filter
-        if (sensor !== 'all') {
-            if (sensor === 'Thermal' && !log.sensor.includes('Temp') && !log.sensor.includes('Thermal')) return false;
-            if (sensor === 'Smoke' && !log.sensor.includes('Smoke') && !log.sensor.includes('Photoelectric')) return false;
-            if (sensor === 'Flame' && !log.sensor.includes('Flame') && !log.sensor.includes('IR')) return false;
-            if (sensor === 'Controls' && !log.sensor.includes('Controls') && !log.sensor.includes('Calibration') && !log.sensor.includes('ESP32') && !log.sensor.includes('Water')) return false;
-        }
-
-        // Date Filter
-        if (dateVal) {
-            let logDateFormatted = log.date;
-            if (log.date === new Date().toLocaleDateString()) {
-                const todayObj = new Date();
-                const yyyy = todayObj.getFullYear();
-                const mm = String(todayObj.getMonth() + 1).padStart(2, '0');
-                const dd = String(todayObj.getDate()).padStart(2, '0');
-                logDateFormatted = `${yyyy}-${mm}-${dd}`;
-            }
-            if (logDateFormatted !== dateVal) return false;
-        }
-
-        return true;
+        card.innerHTML = `
+            <div class="incident-header">
+                🔥 Fire Incident #${incidentNumber}
+            </div>
+            <div class="incident-details">
+                <div class="detail-row">
+                    <span>📅</span>
+                    <span class="detail-label">Date:</span>
+                    <span class="detail-value">${incident.date}</span>
+                </div>
+                <div class="detail-row">
+                    <span>🕒</span>
+                    <span class="detail-label">Fire Time:</span>
+                    <span class="detail-value">${incident.fireTime}</span>
+                </div>
+                <div class="detail-row">
+                    <span>🚨</span>
+                    <span class="detail-label">Alert Time:</span>
+                    <span class="detail-value">${incident.alertTime}</span>
+                </div>
+                
+                <div class="incident-sensors-section">
+                    <div class="section-title">Sensors Active:</div>
+                    <div class="sensor-list">
+                        <div class="sensor-item">
+                            <span>${incident.sensors.flame ? '✅' : '❌'}</span>
+                            <span>Flame Sensor</span>
+                        </div>
+                        <div class="sensor-item">
+                            <span>${incident.sensors.smoke ? '✅' : '❌'}</span>
+                            <span>Smoke Sensor</span>
+                        </div>
+                        <div class="sensor-item">
+                            <span>${incident.sensors.temp ? '✅' : '❌'}</span>
+                            <span>Temperature Sensor</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="incident-status-section">
+                    <div class="section-title">Status:</div>
+                    <div class="incident-status">
+                        <span>✔</span> ${incident.status}
+                    </div>
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
     });
-
-    historyPage = 1; // return to first page on filter change
-    renderHistoryTable();
-}
-
-function resetHistoryFilters() {
-    document.getElementById('history-severity-filter').value = 'all';
-    document.getElementById('history-sensor-filter').value = 'all';
-    document.getElementById('history-date-filter').value = '';
-    applyHistoryFilters();
-}
-
-function paginateHistory(dir) {
-    historyPage += dir;
-    renderHistoryTable();
-}
-
-function clearHistoryLogData() {
-    historyLogs = [];
-    applyHistoryFilters();
-    addResponseActionLog('DB-CLEAR', 'Historic log databases cleared by administrator.');
 }
 
 
