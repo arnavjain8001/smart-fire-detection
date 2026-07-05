@@ -2,10 +2,10 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --bg-base: #18181B; /* professional dark-grey background */
-    --bg-surface: #E4E4E7; /* soft grey for surfaces/cards */
-    --bg-panel: #E4E4E7; /* soft grey for panels */
-    --border-color: #D4D4D8; /* matching soft grey border */
+    --bg-base: #F1F5F9; /* soft slate-grey base background */
+    --bg-surface: #FFFFFF; /* clean white for surfaces/cards */
+    --bg-panel: #FFFFFF; /* clean white for panels */
+    --border-color: #E2E8F0; /* softer slate-blue border */
     --border-glow-red: rgba(239, 68, 68, 0.4);
     --border-glow-yellow: rgba(245, 158, 11, 0.4);
     --border-glow-green: rgba(34, 197, 94, 0.4);
@@ -15,15 +15,15 @@
     --text-muted: #52525B; /* dark grey muted text for high contrast */
 
     /* Safety Palette */
-    --color-safe: #15803d; /* Dark green for safe text on soft grey background */
+    --color-safe: #15803d; /* Dark green for safe text on light background */
     --color-safe-bg: rgba(22, 163, 74, 0.15);
-    --color-warn: #b45309; /* Dark orange/amber for warn text on soft grey */
+    --color-warn: #b45309; /* Dark orange/amber for warn text */
     --color-warn-bg: rgba(217, 119, 6, 0.15);
-    --color-critical: #b91c1c; /* Dark red for critical text on soft grey */
+    --color-critical: #b91c1c; /* Dark red for critical text */
     --color-critical-bg: rgba(220, 38, 38, 0.15);
 
     /* Technical Palette */
-    --color-accent: #1d4ed8; /* Darker accent blue for soft grey background */
+    --color-accent: #1d4ed8; /* Accent blue */
     --color-accent-bg: rgba(37, 99, 235, 0.15);
     --grid-gap: 1.25rem;
 
@@ -41,7 +41,8 @@
 }
 
 body {
-    background-color: var(--bg-base);
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 50%, #E2E8F0 100%);
+    background-attachment: fixed;
     color: var(--text-primary);
     font-family: var(--font-sans);
     min-height: 100vh;
@@ -59,8 +60,8 @@ body::before {
     width: 100%;
     height: 100%;
     background-image:
-        linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
     background-size: 40px 40px;
     z-index: -1;
     pointer-events: none;
@@ -101,16 +102,16 @@ body::before {
 }
 
 ::-webkit-scrollbar-track {
-    background: var(--bg-base);
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #3F3F46;
+    background: #CBD5E1;
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #52525B;
+    background: #94A3B8;
 }
 
 /* Top Navigation Bar */
@@ -119,7 +120,7 @@ body::before {
     top: 0;
     width: 100%;
     height: 70px;
-    background: rgba(228, 228, 231, 0.85);
+    background: rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-color);
     display: flex;
@@ -383,7 +384,7 @@ body::before {
     border: 1px solid var(--border-color);
     border-radius: 16px;
     padding: 1.25rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.04), 0 4px 6px -2px rgba(15, 23, 42, 0.02), inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
     position: relative;
     overflow: hidden;
     transition: all 0.2s ease-in-out;
@@ -504,8 +505,8 @@ body::before {
 
 /* Safe State Styles */
 .status-card.state-safe {
-    border-color: var(--border-glow-green);
-    box-shadow: 0 0 20px rgba(16, 185, 129, 0.08);
+    border-color: rgba(34, 197, 94, 0.3);
+    box-shadow: 0 10px 15px -3px rgba(34, 197, 94, 0.08), 0 4px 6px -2px rgba(34, 197, 94, 0.04), inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
 }
 
 .status-card.state-safe::before {
@@ -514,13 +515,13 @@ body::before {
 
 .status-card.state-safe .status-value {
     color: var(--color-safe);
-    text-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+    text-shadow: 0 0 15px rgba(34, 197, 94, 0.15);
 }
 
 /* Warning State Styles */
 .status-card.state-warning {
-    border-color: var(--border-glow-yellow);
-    box-shadow: 0 0 20px rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.3);
+    box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.08), 0 4px 6px -2px rgba(245, 158, 11, 0.04), inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
     animation: subtlePulseYellow 2s infinite alternate;
 }
 
@@ -530,13 +531,13 @@ body::before {
 
 .status-card.state-warning .status-value {
     color: var(--color-warn);
-    text-shadow: 0 0 15px rgba(245, 158, 11, 0.25);
+    text-shadow: 0 0 15px rgba(245, 158, 11, 0.15);
 }
 
 /* Critical State Styles */
 .status-card.state-critical {
-    border-color: var(--border-glow-red);
-    box-shadow: 0 0 25px rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.15), 0 4px 6px -2px rgba(239, 68, 68, 0.08), inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
     animation: subtlePulseRed 1s infinite alternate;
 }
 
@@ -546,7 +547,7 @@ body::before {
 
 .status-card.state-critical .status-value {
     color: var(--color-critical);
-    text-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+    text-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
 }
 
 @keyframes subtlePulseYellow {
@@ -1637,7 +1638,7 @@ input#sprinkler-toggle:checked+.slider:before {
     height: 80px;
     border-radius: 50%;
     background: var(--color-accent);
-    color: #06080c;
+    color: #FFFFFF;
     font-size: 2.25rem;
     font-weight: 700;
     display: flex;
@@ -1730,13 +1731,13 @@ input#sprinkler-toggle:checked+.slider:before {
     position: relative;
     overflow: hidden;
     transition: var(--transition-normal);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.04), 0 4px 6px -2px rgba(15, 23, 42, 0.02), inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
 }
 
 .incident-card:hover {
     transform: translateY(-4px);
     border-color: rgba(239, 68, 68, 0.3);
-    box-shadow: 0 10px 25px rgba(239, 68, 68, 0.1);
+    box-shadow: 0 20px 25px -5px rgba(239, 68, 68, 0.12), 0 10px 10px -5px rgba(239, 68, 68, 0.04);
 }
 
 .incident-card::before {
