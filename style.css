@@ -2,7 +2,7 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap');
 
 :root {
-    --bg-base: #F7F9FC;
+    --bg-base: #e6e6e6;
     --bg-surface: #FFFFFF;
     --bg-panel: #FFFFFF;
     --border-color: #E6EAF0;
@@ -115,9 +115,8 @@ body::before {
 
 /* Top Navigation Bar */
 .top-nav {
-    position: fixed;
+    position: sticky;
     top: 0;
-    left: 0;
     width: 100%;
     height: 70px;
     background: rgba(255, 255, 255, 0.85);
@@ -128,6 +127,7 @@ body::before {
     align-items: center;
     padding: 0 2rem;
     z-index: 1000;
+    transition: var(--transition-normal);
 }
 
 .nav-brand {
@@ -350,7 +350,6 @@ body::before {
 
 /* Page Containers */
 .main-wrapper {
-    margin-top: 70px;
     padding: 1.5rem;
     max-width: 1600px;
     margin-left: auto;
@@ -426,18 +425,33 @@ body::before {
 .dashboard-grid {
     display: grid;
     grid-template-columns: 320px 1fr 340px;
+    grid-template-areas: "left center right";
     gap: var(--grid-gap);
     align-items: start;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1200px) and (min-width: 768px) {
+    .dashboard-grid {
+        grid-template-columns: 1fr 340px;
+        grid-template-areas: 
+            "center left"
+            "center right";
+    }
+}
+
+@media (max-width: 768px) {
     .dashboard-grid {
         grid-template-columns: 1fr;
+        grid-template-areas: 
+            "left"
+            "center"
+            "right";
     }
 }
 
 /* LEFT PANEL STYLES */
 .left-panel {
+    grid-area: left;
     display: flex;
     flex-direction: column;
     gap: var(--grid-gap);
@@ -609,6 +623,7 @@ body::before {
 
 /* CENTER PANEL STYLES */
 .center-panel {
+    grid-area: center;
     display: flex;
     flex-direction: column;
     gap: var(--grid-gap);
@@ -621,7 +636,13 @@ body::before {
     gap: 1rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 992px) {
+    .sensor-summary-row {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    }
+}
+
+@media (max-width: 576px) {
     .sensor-summary-row {
         grid-template-columns: 1fr;
     }
@@ -710,6 +731,7 @@ body::before {
 
 /* RIGHT PANEL STYLES */
 .right-panel {
+    grid-area: right;
     display: flex;
     flex-direction: column;
     gap: var(--grid-gap);
@@ -1694,7 +1716,7 @@ input#sprinkler-toggle:checked+.slider:before {
 /* Redesigned card-based History page styles */
 .incident-history-container {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
     gap: 1.5rem;
     margin-top: 1rem;
 }
@@ -1964,5 +1986,77 @@ input#sprinkler-toggle:checked+.slider:before {
     100% {
         box-shadow: 0 0 35px rgba(239, 68, 68, 0.6);
         border-color: rgba(239, 68, 68, 0.8);
+    }
+}
+
+/* Responsive Enhancements and Media Queries */
+
+@media (max-width: 992px) {
+    .top-nav {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 0.75rem 1.5rem;
+        gap: 0.75rem;
+        justify-content: space-between;
+    }
+    
+    .nav-brand {
+        order: 1;
+    }
+    
+    .nav-status {
+        order: 2;
+    }
+    
+    .nav-tabs {
+        order: 3;
+        width: 100%;
+        justify-content: center;
+        border-top: 1px solid var(--border-color);
+        padding-top: 0.75rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .top-nav {
+        padding: 0.5rem 1rem;
+    }
+    
+    .username-display {
+        display: none;
+    }
+    
+    .nav-time {
+        display: none;
+    }
+    
+    .nav-tabs {
+        overflow-x: auto;
+        justify-content: flex-start;
+        padding-bottom: 0.25rem;
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+    }
+    
+    .nav-tabs::-webkit-scrollbar {
+        display: none; /* Chrome, Safari and Opera */
+    }
+    
+    .nav-tab-btn {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.85rem;
+        white-space: nowrap;
+    }
+    
+    .page-title h1 {
+        font-size: 1.5rem;
+    }
+    
+    .graph-container {
+        height: 250px;
+    }
+    
+    .sensor-detail-val {
+        font-size: 2.25rem;
     }
 }
