@@ -1116,19 +1116,19 @@ function initCharts() {
         plugins: {
             legend: {
                 labels: {
-                    color: '#9ca3af',
+                    color: '#4B5563',
                     font: { family: 'Outfit', size: 11 }
                 }
             }
         },
         scales: {
             x: {
-                grid: { color: 'rgba(255, 255, 255, 0.03)' },
-                ticks: { color: '#6b7280', font: { family: 'JetBrains Mono', size: 9 } }
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                ticks: { color: '#6B7280', font: { family: 'JetBrains Mono', size: 9 } }
             },
             y: {
-                grid: { color: 'rgba(255, 255, 255, 0.03)' },
-                ticks: { color: '#6b7280', font: { family: 'JetBrains Mono', size: 9 } }
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                ticks: { color: '#6B7280', font: { family: 'JetBrains Mono', size: 9 } }
             }
         }
     };
@@ -1143,7 +1143,7 @@ function initCharts() {
                 {
                     label: 'Temperature (°C)',
                     data: chartTempData,
-                    borderColor: '#ef4444',
+                    borderColor: '#F97316',
                     borderWidth: 2,
                     pointRadius: 0,
                     tension: 0.1,
@@ -1152,7 +1152,7 @@ function initCharts() {
                 {
                     label: 'Smoke Density (%)',
                     data: chartSmokeData,
-                    borderColor: '#9ca3af',
+                    borderColor: '#A855F7',
                     borderWidth: 2,
                     pointRadius: 0,
                     tension: 0.1,
@@ -1161,7 +1161,7 @@ function initCharts() {
                 {
                     label: 'Flame (IR W/m²)',
                     data: chartFlameData,
-                    borderColor: '#f59e0b',
+                    borderColor: '#06B6D4',
                     borderWidth: 2,
                     pointRadius: 0,
                     tension: 0.1,
@@ -1177,25 +1177,25 @@ function initCharts() {
                     type: 'linear',
                     display: true,
                     position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.03)' },
-                    ticks: { color: '#ef4444', font: { family: 'JetBrains Mono', size: 9 } },
-                    title: { display: true, text: 'Temp (°C)', color: '#ef4444', font: { family: 'Outfit', size: 10 } }
+                    grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                    ticks: { color: '#F97316', font: { family: 'JetBrains Mono', size: 9 } },
+                    title: { display: true, text: 'Temp (°C)', color: '#F97316', font: { family: 'Outfit', size: 10 } }
                 },
                 y1: {
                     type: 'linear',
                     display: true,
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    ticks: { color: '#9ca3af', font: { family: 'JetBrains Mono', size: 9 } },
-                    title: { display: true, text: 'Smoke (%)', color: '#9ca3af', font: { family: 'Outfit', size: 10 } }
+                    ticks: { color: '#A855F7', font: { family: 'JetBrains Mono', size: 9 } },
+                    title: { display: true, text: 'Smoke (%)', color: '#A855F7', font: { family: 'Outfit', size: 10 } }
                 },
                 y2: {
                     type: 'linear',
                     display: true,
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    ticks: { color: '#f59e0b', font: { family: 'JetBrains Mono', size: 9 } },
-                    title: { display: true, text: 'Flame (W/m²)', color: '#f59e0b', font: { family: 'Outfit', size: 10 } }
+                    ticks: { color: '#06B6D4', font: { family: 'JetBrains Mono', size: 9 } },
+                    title: { display: true, text: 'Flame (W/m²)', color: '#06B6D4', font: { family: 'Outfit', size: 10 } }
                 }
             }
         }
@@ -1208,7 +1208,7 @@ function initCharts() {
         scales: {
             x: chartOptions.scales.x,
             y: {
-                grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
                 ticks: { color, font: { family: 'JetBrains Mono', size: 9 } },
                 title: { display: true, text: labelText, color, font: { family: 'Outfit', size: 10 } }
             }
@@ -1220,9 +1220,9 @@ function initCharts() {
         type: 'line',
         data: {
             labels: chartLabels,
-            datasets: [{ data: chartTempData, borderColor: '#ef4444', borderWidth: 2, pointRadius: 1, tension: 0.1, fill: 'origin', backgroundColor: 'rgba(239, 68, 68, 0.03)' }]
+            datasets: [{ data: chartTempData, borderColor: '#F97316', borderWidth: 2, pointRadius: 1, tension: 0.1, fill: 'origin', backgroundColor: 'rgba(249, 115, 22, 0.05)' }]
         },
-        options: detailOptions('#ef4444', 'Temperature (°C)')
+        options: detailOptions('#F97316', 'Temperature (°C)')
     });
 
     const ctxSmoke = document.getElementById('smokeDetailChart').getContext('2d');
@@ -1230,9 +1230,9 @@ function initCharts() {
         type: 'line',
         data: {
             labels: chartLabels,
-            datasets: [{ data: chartSmokeData, borderColor: '#9ca3af', borderWidth: 2, pointRadius: 1, tension: 0.1, fill: 'origin', backgroundColor: 'rgba(156, 163, 175, 0.03)' }]
+            datasets: [{ data: chartSmokeData, borderColor: '#A855F7', borderWidth: 2, pointRadius: 1, tension: 0.1, fill: 'origin', backgroundColor: 'rgba(168, 85, 247, 0.05)' }]
         },
-        options: detailOptions('#9ca3af', 'Smoke Density (%)')
+        options: detailOptions('#A855F7', 'Smoke Density (%)')
     });
 
     const ctxFlame = document.getElementById('flameDetailChart').getContext('2d');
@@ -1240,8 +1240,8 @@ function initCharts() {
         type: 'line',
         data: {
             labels: chartLabels,
-            datasets: [{ data: chartFlameData, borderColor: '#f59e0b', borderWidth: 2, pointRadius: 1, tension: 0.1, fill: 'origin', backgroundColor: 'rgba(245, 158, 11, 0.03)' }]
+            datasets: [{ data: chartFlameData, borderColor: '#06B6D4', borderWidth: 2, pointRadius: 1, tension: 0.1, fill: 'origin', backgroundColor: 'rgba(6, 182, 212, 0.05)' }]
         },
-        options: detailOptions('#f59e0b', 'Flame Intensity (W/m²)')
+        options: detailOptions('#06B6D4', 'Flame Intensity (W/m²)')
     });
 }
