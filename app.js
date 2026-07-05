@@ -90,12 +90,18 @@ document.addEventListener("DOMContentLoaded", () => {
     // Start real-time sensor loop (runs every second)
     setInterval(sensorTelemetryLoop, 1000);
 
-    // Initialize control inputs with JS state
-    document.getElementById('sprinkler-toggle').checked = sprinklerActive;
-    document.getElementById('auto-mode-toggle').checked = autoMode;
+    // Initialize control inputs with JS state (check if elements exist)
+    const sprinklerToggle = document.getElementById('sprinkler-toggle');
+    if (sprinklerToggle) sprinklerToggle.checked = sprinklerActive;
+    
+    const autoModeToggle = document.getElementById('auto-mode-toggle');
+    if (autoModeToggle) autoModeToggle.checked = autoMode;
 
     // Load initial history view
     renderIncidentsHistory();
+
+    // Fetch latest fire alert info
+    fetchLatestAlertData();
 
     // Close user dropdown menu when clicking outside
     window.addEventListener('click', (e) => {
@@ -524,16 +530,24 @@ function updateInterfaceReadouts() {
     }
 
     // 6. Sync UI Checkbox indicators
-    document.getElementById('sprinkler-toggle').checked = sprinklerActive;
+    const sprinklerToggle = document.getElementById('sprinkler-toggle');
+    if (sprinklerToggle) sprinklerToggle.checked = sprinklerActive;
     
     // Update pump status badge in Health status list
     const pumpBadge = document.getElementById('health-pump-badge');
-    if (sprinklerActive) {
-        pumpBadge.textContent = '● ACTIVE';
-        pumpBadge.className = 'dev-badge dev-offline';
-    } else {
-        pumpBadge.textContent = '● Ready';
-        pumpBadge.className = 'dev-badge dev-active';
+    if (pumpBadge) {
+        if (sprinklerActive) {
+            pumpBadge.textContent = '● ACTIVE';
+            pumpBadge.className = 'dev-badge dev-offline';
+        } else {
+            pumpBadge.textContent = '● Ready';
+            pumpBadge.className = 'dev-badge dev-active';
+        }
+    }
+
+    // 7. Update Latest Fire Alert Card if loaded
+    if (latestAlertLoaded) {
+        updateLatestAlertCard();
     }
 }
 
@@ -654,15 +668,16 @@ function triggerManualOverride() {
     emergencyOverride = !emergencyOverride;
     const btn = document.getElementById('emergency-override-btn');
 
-    if (emergencyOverride) {
-        btn.classList.add('active');
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Cancel Override`;
-        evaluateSafetyThresholds(); // trigger system level warnings
-    } else {
-        btn.classList.remove('active');
-        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> Emergency Override`;
-        evaluateSafetyThresholds();
+    if (btn) {
+        if (emergencyOverride) {
+            btn.classList.add('active');
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> Cancel Override`;
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> Emergency Override`;
+        }
     }
+    evaluateSafetyThresholds();
 }
 
 // Settings Threshold Sliders Event Handler (disabled since page-settings was removed)
@@ -748,6 +763,86 @@ function resetEntireSystemState() {
 
     addResponseActionLog('SYSTEM-RESET', 'Diagnostic states cleared. System returned to default calibration.');
     createTimelineAlert('SYSTEM RESET', 'Telemetry baselines and control systems calibrated.', 'info', 'Server core');
+}
+
+// Simulated Firebase/API fetching of latest fire alert status
+let latestAlertLoaded = false;
+
+function fetchLatestAlertData() {
+    latestAlertLoaded = false;
+    renderLatestAlertSkeleton();
+    
+    // Simulate async API call from Firebase / API
+    setTimeout(() => {
+        latestAlertLoaded = true;
+        updateLatestAlertCard();
+    }, 1200);
+}
+
+function renderLatestAlertSkeleton() {
+    const container = document.getElementById('latest-alert-container');
+    if (!container) return;
+    
+    container.innerHTML = `
+        <div class="skeleton-loader">
+            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 0.2rem;">Fetching latest alert...</p>
+            <div class="skeleton-line skeleton-title"></div>
+            <div class="skeleton-line skeleton-value" style="height: 40px;"></div>
+            <div class="skeleton-line" style="width: 90%;"></div>
+            <div class="skeleton-line" style="width: 75%;"></div>
+        </div>
+    `;
+}
+
+function updateLatestAlertCard() {
+    const container = document.getElementById('latest-alert-container');
+    const card = document.getElementById('latest-fire-alert-card');
+    if (!container || !card) return;
+
+    let statusText = 'Safe';
+    let statusClass = 'status-safe';
+    let cardClass = 'card-safe';
+
+    if (systemState === 'CRITICAL') {
+        statusText = 'Fire Detected';
+        statusClass = 'status-critical';
+        cardClass = 'card-critical';
+    } else if (systemState === 'WARNING') {
+        statusText = 'Warning';
+        statusClass = 'status-warning';
+        cardClass = 'card-warning';
+    }
+
+    // Set card class
+    card.className = `glass-panel ${cardClass}`;
+
+    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
+    container.innerHTML = `
+        <div class="alert-content-wrapper">
+            <div class="alert-status-header">
+                <span class="latest-alert-badge ${statusClass}">${statusText}</span>
+                <span class="latest-alert-time">${timestamp}</span>
+            </div>
+            <div class="latest-alert-readings">
+                <div class="reading-row">
+                    <span class="reading-label">🌡️ Temperature:</span>
+                    <span class="reading-value">${sensors.temp.val.toFixed(1)} °C</span>
+                </div>
+                <div class="reading-row">
+                    <span class="reading-label">💨 Smoke Level:</span>
+                    <span class="reading-value">${sensors.smoke.val.toFixed(1)} %</span>
+                </div>
+                <div class="reading-row">
+                    <span class="reading-label">🔥 Flame Sensor:</span>
+                    <span class="reading-value">${sensors.flame.val.toFixed(2)} W/m²</span>
+                </div>
+            </div>
+            <div class="latest-alert-footer">
+                <span>Last Updated: Just Now</span>
+            </div>
+        </div>
+    `;
 }
 
 // Timeline Alert management

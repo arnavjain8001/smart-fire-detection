@@ -301,55 +301,19 @@
                         </div>
                     </div>
 
-                    <!-- System Controls Card -->
-                    <div class="glass-panel">
+                    <!-- Latest Fire Alert Card -->
+                    <div class="glass-panel" id="latest-fire-alert-card">
                         <div class="panel-title">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
                                 fill="none" stroke="currentColor" stroke-width="2">
-                                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                                <line x1="9" y1="3" x2="9" y2="21"></line>
+                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                <line x1="12" y1="9" x2="12" y2="13"></line>
+                                <line x1="12" y1="17" x2="12.01" y2="17"></line>
                             </svg>
-                            System Hardware Controls
+                            Latest Fire Alert
                         </div>
-                        <div class="control-grid">
-                            <!-- Toggle Sprinkler -->
-                            <div class="control-item">
-                                <div class="control-label-box">
-                                    <span class="control-name">Water Sprinkler Pump</span>
-                                    <span class="control-desc">Force manual water deployment</span>
-                                </div>
-                                <label class="switch">
-                                    <input type="checkbox" id="sprinkler-toggle"
-                                        onchange="toggleSprinkler(this.checked)">
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-
-                            <!-- Auto Mode Toggle -->
-                            <div class="control-item">
-                                <div class="control-label-box">
-                                    <span class="control-name">Auto Fire Defense</span>
-                                    <span class="control-desc">Automatic sprinkler triggers</span>
-                                </div>
-                                <label class="switch">
-                                    <input type="checkbox" id="auto-mode-toggle" checked
-                                        onchange="toggleAutoMode(this.checked)">
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
-
-                            <!-- Manual Override Button -->
-                            <button class="btn-emergency" id="emergency-override-btn" onclick="triggerManualOverride()">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2.5">
-                                    <path
-                                        d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
-                                    </path>
-                                    <line x1="12" y1="9" x2="12" y2="13"></line>
-                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                                </svg>
-                                Emergency Override
-                            </button>
+                        <div id="latest-alert-container">
+                            <!-- Populated dynamically by app.js -->
                         </div>
                     </div>
 
