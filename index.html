@@ -5,6 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FireShield Pro | Industrial IoT SCADA Fire Safety System</title>
+    <!-- Session Authentication Gate - Verify login status before rendering -->
+    <script>
+        (function() {
+            const session = localStorage.getItem('fire_detection_session');
+            if (!session) {
+                window.location.href = 'auth/login.html';
+            }
+        })();
+    </script>
     <!-- CSS Link -->
     <link rel="stylesheet" href="style.css">
     <!-- Chart.js CDN -->

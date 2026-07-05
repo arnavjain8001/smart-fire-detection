@@ -1,0 +1,124 @@
+<!-- 
+  Smart Fire Detection System - Login Page
+  Integrated into Fire_Detection_UI from Login_Page project.
+  No design changes; preserves identical UI structure.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Smart Fire Detection System</title>
+  <meta name="description" content="Secure login to the Smart Fire Detection System dashboard. Monitor sensors, status, and system configurations.">
+  
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="auth.css">
+</head>
+<body>
+
+  <!-- Toast Notification System Anchor -->
+  <div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <div class="auth-wrapper">
+    <main class="auth-card" id="loginCard">
+      
+      <!-- Brand & Header -->
+      <header class="brand-header">
+        <div class="logo-container" aria-hidden="true">
+          <!-- Animated Fire/Flame SVG Logo -->
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
+          </svg>
+        </div>
+        <h1>Smart Fire Detection System</h1>
+        <p>Access your real-time safety dashboard</p>
+      </header>
+
+      <!-- Form Inputs -->
+      <form id="loginForm" novalidate>
+        
+        <!-- Email Address -->
+        <div class="form-group">
+          <label for="email" class="form-label">Email Address</label>
+          <div class="input-container">
+            <span class="input-icon">
+              <!-- Mail Icon -->
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+            </span>
+            <input 
+              type="email" 
+              id="email" 
+              class="form-control" 
+              placeholder="name@example.com" 
+              autocomplete="email"
+              required
+            >
+          </div>
+          <div class="validation-error-msg" id="email-error"></div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group">
+          <label for="password" class="form-label">Password</label>
+          <div class="input-container">
+            <span class="input-icon">
+              <!-- Lock Icon -->
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </span>
+            <input 
+              type="password" 
+              id="password" 
+              class="form-control has-toggle" 
+              placeholder="Enter your password" 
+              autocomplete="current-password"
+              required
+            >
+            <button 
+              type="button" 
+              class="password-toggle-btn" 
+              data-target="password" 
+              aria-label="Show password"
+            >
+              <!-- Eye Icon -->
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
+          <div class="validation-error-msg" id="password-error"></div>
+        </div>
+
+        <!-- Remember Me & Forgot Password Options -->
+        <div class="form-options">
+          <label class="checkbox-container" for="rememberMe">
+            <input type="checkbox" id="rememberMe">
+            <span class="checkmark" aria-hidden="true">
+              <!-- Checkmark Icon -->
+              <svg viewBox="0 0 24 24">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </span>
+            Remember Me
+          </label>
+          <a href="#" class="forgot-password-link" id="forgotPassword">Forgot Password?</a>
+        </div>
+
+        <!-- Login Submit Button -->
+        <button type="submit" class="auth-btn" id="loginBtn">
+          <span class="btn-spinner" aria-hidden="true"></span>
+          <span class="btn-text">Log In</span>
+        </button>
+
+      </form>
+
+      <!-- Redirect to Sign Up -->
+      <footer class="auth-footer">
+        Don't have an account? 
+        <a href="signup.html" class="auth-footer-link" id="signupLink">Create Account</a>
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- Main JavaScript Authentication logic -->
+  <script src="auth.js"></script>
+</body>
+</html>

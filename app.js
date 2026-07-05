@@ -77,6 +77,21 @@ let chartFlameData = Array(maxTicks).fill(0.0);
 
 // Initialize application on DOM load
 document.addEventListener("DOMContentLoaded", () => {
+    // Load active user session if available (Auth Integration)
+    const session = localStorage.getItem('fire_detection_session');
+    if (session) {
+        try {
+            const userData = JSON.parse(session);
+            userProfile.username = userData.fullName || userProfile.username;
+            userProfile.email = userData.email || userProfile.email;
+        } catch (e) {
+            console.error("Error loading user profile session details", e);
+        }
+    }
+    
+    // Initialize UI components with user details (Auth Integration)
+    updateUserProfileUI();
+    
     // Start Clock
     updateClock();
     setInterval(updateClock, 1000);
@@ -174,6 +189,26 @@ function enableUsernameEditing() {
     editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 }
 
+// Helper function to update the user profile readings in the dashboard UI (Auth Integration)
+function updateUserProfileUI() {
+    const navUsername = document.getElementById('nav-username');
+    if (navUsername) navUsername.textContent = userProfile.username;
+
+    const initials = userProfile.username.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    
+    const navAvatar = document.getElementById('nav-avatar-img');
+    if (navAvatar) navAvatar.textContent = initials;
+
+    const profileAvatar = document.getElementById('profile-avatar-large');
+    if (profileAvatar) profileAvatar.textContent = initials;
+
+    const profileUsernameInput = document.getElementById('profile-username-input');
+    if (profileUsernameInput) profileUsernameInput.value = userProfile.username;
+
+    const profileEmailInput = document.getElementById('profile-email-input');
+    if (profileEmailInput) profileEmailInput.value = userProfile.email;
+}
+
 function saveUsernameChanges() {
     const input = document.getElementById('profile-username-input');
     const saveBtnContainer = document.getElementById('profile-save-container');
@@ -186,18 +221,35 @@ function saveUsernameChanges() {
 
     userProfile.username = input.value.trim();
     
-    // Update navigation readout
-    document.getElementById('nav-username').textContent = userProfile.username;
-    
-    // Update initials in avatars
-    const initials = userProfile.username.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-    document.getElementById('nav-avatar-img').textContent = initials;
-    document.getElementById('profile-avatar-large').textContent = initials;
+    // Update UI displays (Auth Integration)
+    updateUserProfileUI();
 
     // Lock input
     input.disabled = true;
     saveBtnContainer.style.display = 'none';
     editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
+
+    // Sync profile edit back into localStorage session and mock database (Auth Integration)
+    const session = localStorage.getItem('fire_detection_session');
+    if (session) {
+        try {
+            const userData = JSON.parse(session);
+            userData.fullName = userProfile.username;
+            localStorage.setItem('fire_detection_session', JSON.stringify(userData));
+            
+            // Also sync users database if present
+            const usersJson = localStorage.getItem('fire_detection_users');
+            if (usersJson) {
+                const users = JSON.parse(usersJson);
+                if (users[userData.email]) {
+                    users[userData.email].fullName = userProfile.username;
+                    localStorage.setItem('fire_detection_users', JSON.stringify(users));
+                }
+            }
+        } catch (e) {
+            console.error("Error syncing profile edits to localStorage", e);
+        }
+    }
 
     // Log the change
     addResponseActionLog('PROFILE', 'Username updated.');
@@ -221,9 +273,14 @@ function triggerPhotoChange() {
 
 function triggerLogout() {
     if (confirm('Are you sure you want to log out of FireShield SCADA core?')) {
+        // Clear active login session (Auth Integration)
+        localStorage.removeItem('fire_detection_session');
+        
         resetEntireSystemState();
         switchTab('dashboard');
-        alert('You have logged out. (Session variables reset)');
+        
+        // Redirect user to the login screen (Auth Integration)
+        window.location.href = 'auth/login.html';
     }
 }
 
