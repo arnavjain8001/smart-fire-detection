@@ -17,6 +17,9 @@
 
 <body>
 
+    <!-- Emergency Banner Container -->
+    <div id="emergency-banner-container"></div>
+
     <!-- Emergency Red Flashing Border Overlay -->
     <div class="critical-alarm-overlay" id="critical-overlay"></div>
 
@@ -141,20 +144,26 @@
                             </svg>
                             Quick Actions
                         </div>
-                        <div class="action-buttons">
-                            <button class="btn-secondary" onclick="switchTab('sensors')">
-                                View Live Sensors
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="9 18 15 12 9 6"></polyline>
-                                </svg>
-                            </button>
-                            <button class="btn-secondary" onclick="switchTab('alerts')">
-                                View Alert History
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                    fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="9 18 15 12 9 6"></polyline>
-                                </svg>
+                        <div class="action-buttons" style="display:flex; flex-direction:column; gap:0.5rem; width:100%;">
+                            <div style="display:flex; gap:0.5rem; width:100%;">
+                                <button class="btn-secondary" onclick="switchTab('sensors')" style="flex:1; margin:0;">
+                                    View Live Sensors
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="9 18 15 12 9 6"></polyline>
+                                    </svg>
+                                </button>
+                                <button class="btn-secondary" onclick="switchTab('alerts')" style="flex:1; margin:0;">
+                                    View Alert History
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2">
+                                        <polyline points="9 18 15 12 9 6"></polyline>
+                                    </svg>
+                                </button>
+                            </div>
+                            <button class="btn-emergency" id="emergency-override-btn" onclick="triggerManualOverride()" style="margin: 0; width:100%;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                Emergency Override
                             </button>
                         </div>
                     </div>
@@ -481,6 +490,12 @@
         </section>
 
     </main>
+
+    <!-- Emergency Alert System Services -->
+    <script src="audioService.js"></script>
+    <script src="notificationService.js"></script>
+    <script src="emergencyBanner.js"></script>
+    <script src="emergencyPopup.js"></script>
 
     <!-- Core App JS -->
     <script src="block_inspect.js"></script>

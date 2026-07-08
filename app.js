@@ -4,6 +4,12 @@
 let systemState = 'SAFE'; // 'SAFE', 'WARNING', 'CRITICAL'
 let currentTab = 'dashboard';
 
+// Emergency Alert System State Variables
+let lastFireActive = false;
+let activeAlertId = 0;
+let firebaseFireStatus = false;
+let firebaseFireSeverity = 'CRITICAL';
+
 
 
 // Sensor values
@@ -101,9 +107,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Load initial history view
     renderIncidentsHistory();
-
-    // Fetch latest fire alert info
-    fetchLatestAlertData();
 });
 
 // Update Clock
@@ -170,6 +173,14 @@ function startFirebaseListener() {
     sensorRef.on('value', (snapshot) => {
         const data = snapshot.val();
         if (!data) return;
+
+        // Extract Fire Status & Severity from Firebase/API
+        if (data.fireStatus !== undefined) {
+            firebaseFireStatus = (data.fireStatus === true || data.fireStatus === 'true' || data.fireStatus === 1 || data.fireStatus === '1' || data.fireStatus === 'TRUE');
+        } else {
+            firebaseFireStatus = false;
+        }
+        firebaseFireSeverity = data.fireSeverity || 'CRITICAL';
 
         // Map Firebase fields to dashboard sensors
         // temperature → Temperature sensor (°C)
@@ -313,6 +324,89 @@ function evaluateSafetyThresholds() {
     if (systemState === 'CRITICAL' && autoMode && !sprinklerActive) {
         activateSprinkler(true, 'AUTO-RESPONSE');
     }
+
+    // Evaluate and synchronize the Emergency Alert System
+    evaluateEmergencyAlerts();
+}
+
+// Central Emergency Alert System Controller
+function evaluateEmergencyAlerts() {
+    // A fire is active if the Firebase field is true, or if we have a local emergency override,
+    // or if the physical sensor analysis triggered a CRITICAL system state.
+    const isFireActive = firebaseFireStatus || emergencyOverride || (systemState === 'CRITICAL');
+    
+    // Severity priority: if manual override/threshold warning is active locally without Firebase data, default to CRITICAL
+    const currentSeverity = (firebaseFireStatus) ? firebaseFireSeverity : 'CRITICAL';
+
+    if (isFireActive) {
+        // Show emergency banner (stays active as long as fire is active)
+        emergencyBanner.show();
+
+        // If transitioning from non-active to active, trigger popup, sound, and notification
+        if (!lastFireActive) {
+            activeAlertId++;
+            
+            // Trigger emergency popup
+            emergencyPopup.show(
+                currentSeverity,
+                // OK button callback / Auto-close callback
+                () => {
+                    // Stop siren when OK is pressed or auto-closed
+                    audioService.stopSiren();
+                },
+                // View Dashboard callback
+                () => {
+                    // Stop siren
+                    audioService.stopSiren();
+                    // Navigate to dashboard tab
+                    switchTab('dashboard');
+                    // Smoothly scroll to the sensor summary cards
+                    setTimeout(() => {
+                        const sensorSummary = document.querySelector('.sensor-summary-row');
+                        if (sensorSummary) {
+                            sensorSummary.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 150);
+                }
+            );
+
+            // Play emergency siren loop (automatically loops until stopped)
+            audioService.startSiren();
+
+            // Fire browser push notification (requests permission if needed)
+            notificationService.show(
+                "🚨 Fire Detected",
+                `Hazard Severity: ${currentSeverity.toUpperCase()}. Please evacuate immediately. Stay Safe.`
+            );
+        } else {
+            // If already active, keep the popup severity updated in-place (if it changes)
+            if (emergencyPopup.isVisible) {
+                emergencyPopup.show(
+                    currentSeverity,
+                    () => audioService.stopSiren(),
+                    () => {
+                        audioService.stopSiren();
+                        switchTab('dashboard');
+                        setTimeout(() => {
+                            const sensorSummary = document.querySelector('.sensor-summary-row');
+                            if (sensorSummary) {
+                                sensorSummary.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        }, 150);
+                    }
+                );
+            }
+        }
+    } else {
+        // When fire status resolves back to false
+        if (lastFireActive) {
+            audioService.stopSiren();
+            emergencyPopup.close();
+            emergencyBanner.hide();
+        }
+    }
+
+    lastFireActive = isFireActive;
 }
 
 // Handle transition between safety states
@@ -462,11 +556,6 @@ function updateInterfaceReadouts() {
             pumpBadge.textContent = '● Ready';
             pumpBadge.className = 'dev-badge dev-active';
         }
-    }
-
-    // 7. Update Latest Fire Alert Card if loaded
-    if (latestAlertLoaded) {
-        updateLatestAlertCard();
     }
 }
 
@@ -645,6 +734,10 @@ function resetEntireSystemState() {
     emergencyOverride = false;
     sprinklerActive = false;
     
+    // Reset emergency variables
+    firebaseFireStatus = false;
+    firebaseFireSeverity = 'CRITICAL';
+    
     sensors.temp.val = 24.5;
     sensors.smoke.val = 12.1;
     sensors.flame.val = 0.0;
@@ -682,86 +775,6 @@ function resetEntireSystemState() {
 
     addResponseActionLog('SYSTEM-RESET', 'Diagnostic states cleared. System returned to default calibration.');
     createTimelineAlert('SYSTEM RESET', 'Telemetry baselines and control systems calibrated.', 'info', 'Server core');
-}
-
-// Simulated Firebase/API fetching of latest fire alert status
-let latestAlertLoaded = false;
-
-function fetchLatestAlertData() {
-    latestAlertLoaded = false;
-    renderLatestAlertSkeleton();
-    
-    // Simulate async API call from Firebase / API
-    setTimeout(() => {
-        latestAlertLoaded = true;
-        updateLatestAlertCard();
-    }, 1200);
-}
-
-function renderLatestAlertSkeleton() {
-    const container = document.getElementById('latest-alert-container');
-    if (!container) return;
-    
-    container.innerHTML = `
-        <div class="skeleton-loader">
-            <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom: 0.2rem;">Fetching latest alert...</p>
-            <div class="skeleton-line skeleton-title"></div>
-            <div class="skeleton-line skeleton-value" style="height: 40px;"></div>
-            <div class="skeleton-line" style="width: 90%;"></div>
-            <div class="skeleton-line" style="width: 75%;"></div>
-        </div>
-    `;
-}
-
-function updateLatestAlertCard() {
-    const container = document.getElementById('latest-alert-container');
-    const card = document.getElementById('latest-fire-alert-card');
-    if (!container || !card) return;
-
-    let statusText = 'Safe';
-    let statusClass = 'status-safe';
-    let cardClass = 'card-safe';
-
-    if (systemState === 'CRITICAL') {
-        statusText = 'Fire Detected';
-        statusClass = 'status-critical';
-        cardClass = 'card-critical';
-    } else if (systemState === 'WARNING') {
-        statusText = 'Warning';
-        statusClass = 'status-warning';
-        cardClass = 'card-warning';
-    }
-
-    // Set card class
-    card.className = `glass-panel ${cardClass}`;
-
-    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-
-    container.innerHTML = `
-        <div class="alert-content-wrapper">
-            <div class="alert-status-header">
-                <span class="latest-alert-badge ${statusClass}">${statusText}</span>
-                <span class="latest-alert-time">${timestamp}</span>
-            </div>
-            <div class="latest-alert-readings">
-                <div class="reading-row">
-                    <span class="reading-label">🌡️ Temperature:</span>
-                    <span class="reading-value">${sensors.temp.val.toFixed(1)} °C</span>
-                </div>
-                <div class="reading-row">
-                    <span class="reading-label">💨 Smoke Level:</span>
-                    <span class="reading-value">${sensors.smoke.val.toFixed(1)} %</span>
-                </div>
-                <div class="reading-row">
-                    <span class="reading-label">🔥 Flame Sensor:</span>
-                    <span class="reading-value">${sensors.flame.val.toFixed(2)} W/m²</span>
-                </div>
-            </div>
-            <div class="latest-alert-footer">
-                <span>Last Updated: Just Now</span>
-            </div>
-        </div>
-    `;
 }
 
 // Timeline Alert management
