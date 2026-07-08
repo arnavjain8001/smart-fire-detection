@@ -1,14 +1,10 @@
-// app.js - Smart Fire Detection Dashboard Controller
+    // app.js - Smart Fire Detection Dashboard Controller
 
 // System State Variables
 let systemState = 'SAFE'; // 'SAFE', 'WARNING', 'CRITICAL'
 let currentTab = 'dashboard';
 
-// User Profile State
-let userProfile = {
-    username: 'Arnav Jain',
-    email: 'arnavjain@example.com'
-};
+
 
 // Sensor values
 let sensors = {
@@ -30,7 +26,7 @@ let deviceHealth = {
 // Safety Threshold Limits (Adjustable via Settings)
 let thresholds = {
     temp: 60.0,
-    smoke: 40.0,
+    smoke: 1638, // Adjusted for raw ADC value (previously 40.0%)
     flame: 1.50
 };
 
@@ -39,28 +35,38 @@ let autoMode = true;
 let sprinklerActive = false;
 let emergencyOverride = false;
 
-// Simulated Firebase database integration
-const firebaseDb = {
-    ref: function(path) {
-        return {
-            push: function(data) {
-                let list = JSON.parse(localStorage.getItem(path) || '[]');
-                list.unshift(data); // latest first
-                localStorage.setItem(path, JSON.stringify(list));
-                return { key: 'mock-key-' + Date.now() };
-            },
-            get: function() {
-                return JSON.parse(localStorage.getItem(path) || '[]');
-            },
-            set: function(data) {
-                localStorage.setItem(path, JSON.stringify(data));
-            }
-        };
+// Firebase Configuration & Initialization
+const firebaseConfig = {
+    apiKey: ENV.FIREBASE_API_KEY,
+    authDomain: ENV.FIREBASE_AUTH_DOMAIN,
+    databaseURL: ENV.FIREBASE_DATABASE_URL,
+    projectId: ENV.FIREBASE_PROJECT_ID,
+    storageBucket: ENV.FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: ENV.FIREBASE_MESSAGING_SENDER_ID,
+    appId: ENV.FIREBASE_APP_ID,
+    measurementId: ENV.FIREBASE_MEASUREMENT_ID
+};
+
+firebase.initializeApp(firebaseConfig);
+const database = firebase.database();
+let firebaseConnected = false;
+
+// Local incident history storage (localStorage-backed)
+const incidentStore = {
+    push: function(data) {
+        let list = JSON.parse(localStorage.getItem('fire_incidents') || '[]');
+        list.unshift(data);
+        localStorage.setItem('fire_incidents', JSON.stringify(list));
+    },
+    get: function() {
+        return JSON.parse(localStorage.getItem('fire_incidents') || '[]');
+    },
+    set: function(data) {
+        localStorage.setItem('fire_incidents', JSON.stringify(data));
     }
 };
 
 let activeAlerts = [];
-let incidentStage = 0; // 0=None, 1=Building Up, 2=Critical peak, 3=Cooldown
 
 // Chart.js instances
 let mainChart = null;
@@ -77,21 +83,6 @@ let chartFlameData = Array(maxTicks).fill(0.0);
 
 // Initialize application on DOM load
 document.addEventListener("DOMContentLoaded", () => {
-    // Load active user session if available (Auth Integration)
-    const session = localStorage.getItem('fire_detection_session');
-    if (session) {
-        try {
-            const userData = JSON.parse(session);
-            userProfile.username = userData.fullName || userProfile.username;
-            userProfile.email = userData.email || userProfile.email;
-        } catch (e) {
-            console.error("Error loading user profile session details", e);
-        }
-    }
-    
-    // Initialize UI components with user details (Auth Integration)
-    updateUserProfileUI();
-    
     // Start Clock
     updateClock();
     setInterval(updateClock, 1000);
@@ -102,29 +93,17 @@ document.addEventListener("DOMContentLoaded", () => {
     // Initialize Charts
     initCharts();
     
-    // Start real-time sensor loop (runs every second)
-    setInterval(sensorTelemetryLoop, 1000);
+    // Start Firebase real-time listener for sensor data
+    startFirebaseListener();
 
-    // Initialize control inputs with JS state (check if elements exist)
-    const sprinklerToggle = document.getElementById('sprinkler-toggle');
-    if (sprinklerToggle) sprinklerToggle.checked = sprinklerActive;
-    
-    const autoModeToggle = document.getElementById('auto-mode-toggle');
-    if (autoModeToggle) autoModeToggle.checked = autoMode;
+    // Start UI refresh loop (pushes chart data & refreshes readouts every second)
+    setInterval(uiRefreshLoop, 1000);
 
     // Load initial history view
     renderIncidentsHistory();
 
     // Fetch latest fire alert info
     fetchLatestAlertData();
-
-    // Close user dropdown menu when clicking outside
-    window.addEventListener('click', (e) => {
-        const trigger = document.getElementById('profile-dropdown-trigger');
-        if (trigger && !trigger.contains(e.target)) {
-            document.getElementById('profile-dropdown').classList.remove('show');
-        }
-    });
 });
 
 // Update Clock
@@ -155,9 +134,6 @@ function switchTab(tabId) {
     
     currentTab = tabId;
 
-    // Close profile dropdown if opened
-    document.getElementById('profile-dropdown').classList.remove('show');
-
     // Force Charts redraw to fit panel size container
     setTimeout(() => {
         if (tabId === 'dashboard' && mainChart) mainChart.update();
@@ -169,232 +145,118 @@ function switchTab(tabId) {
     }, 50);
 }
 
-// User Profile Actions
-function toggleProfileDropdown() {
-    document.getElementById('profile-dropdown').classList.toggle('show');
-}
+// Firebase Real-time Listener — fetches live sensor data from RTDB
+function startFirebaseListener() {
+    const sensorRef = database.ref('sensorData');
 
-// Username edit activation
-function enableUsernameEditing() {
-    const input = document.getElementById('profile-username-input');
-    const saveBtnContainer = document.getElementById('profile-save-container');
-    const editBtn = document.getElementById('btn-edit-username');
+    // Monitor connection state
+    database.ref('.info/connected').on('value', (snap) => {
+        const espBadge = document.getElementById('health-esp32-badge');
+        const wifiBadge = document.getElementById('health-wifi-badge');
 
-    input.disabled = false;
-    input.focus();
-    input.select();
-    saveBtnContainer.style.display = 'block';
-    
-    // Switch icon to checkmark/confirm
-    editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
-}
-
-// Helper function to update the user profile readings in the dashboard UI (Auth Integration)
-function updateUserProfileUI() {
-    const navUsername = document.getElementById('nav-username');
-    if (navUsername) navUsername.textContent = userProfile.username;
-
-    const initials = userProfile.username.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-    
-    const navAvatar = document.getElementById('nav-avatar-img');
-    if (navAvatar) navAvatar.textContent = initials;
-
-    const profileAvatar = document.getElementById('profile-avatar-large');
-    if (profileAvatar) profileAvatar.textContent = initials;
-
-    const profileUsernameInput = document.getElementById('profile-username-input');
-    if (profileUsernameInput) profileUsernameInput.value = userProfile.username;
-
-    const profileEmailInput = document.getElementById('profile-email-input');
-    if (profileEmailInput) profileEmailInput.value = userProfile.email;
-}
-
-function saveUsernameChanges() {
-    const input = document.getElementById('profile-username-input');
-    const saveBtnContainer = document.getElementById('profile-save-container');
-    const editBtn = document.getElementById('btn-edit-username');
-
-    if (input.value.trim() === '') {
-        alert('Username cannot be empty.');
-        return;
-    }
-
-    userProfile.username = input.value.trim();
-    
-    // Update UI displays (Auth Integration)
-    updateUserProfileUI();
-
-    // Lock input
-    input.disabled = true;
-    saveBtnContainer.style.display = 'none';
-    editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>`;
-
-    // Sync profile edit back into localStorage session and mock database (Auth Integration)
-    const session = localStorage.getItem('fire_detection_session');
-    if (session) {
-        try {
-            const userData = JSON.parse(session);
-            userData.fullName = userProfile.username;
-            localStorage.setItem('fire_detection_session', JSON.stringify(userData));
-            
-            // Also sync users database if present
-            const usersJson = localStorage.getItem('fire_detection_users');
-            if (usersJson) {
-                const users = JSON.parse(usersJson);
-                if (users[userData.email]) {
-                    users[userData.email].fullName = userProfile.username;
-                    localStorage.setItem('fire_detection_users', JSON.stringify(users));
-                }
-            }
-        } catch (e) {
-            console.error("Error syncing profile edits to localStorage", e);
-        }
-    }
-
-    // Log the change
-    addResponseActionLog('PROFILE', 'Username updated.');
-}
-
-function triggerPhotoChange() {
-    // Generate random avatar colors to simulate photo change
-    const colors = ['#06b6d4', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#ec4899'];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    
-    const avatar1 = document.getElementById('nav-avatar-img');
-    const avatar2 = document.getElementById('profile-avatar-large');
-    
-    avatar1.style.backgroundColor = randomColor;
-    avatar1.style.color = '#06080c';
-    avatar2.style.backgroundColor = randomColor;
-    avatar2.style.color = '#06080c';
-
-    addResponseActionLog('PROFILE', 'Photo updated.');
-}
-
-function triggerLogout() {
-    if (confirm('Are you sure you want to log out of FireShield SCADA core?')) {
-        // Clear active login session (Auth Integration)
-        localStorage.removeItem('fire_detection_session');
-        
-        resetEntireSystemState();
-        switchTab('dashboard');
-        
-        // Redirect user to the login screen (Auth Integration)
-        window.location.href = 'auth/login.html';
-    }
-}
-
-// Generate realistic fluctuating environmental variables
-function sensorTelemetryLoop() {
-    simulateJitterDeviceHealth();
-
-    let deltaTemp = (Math.random() - 0.5) * 0.4;
-    let deltaSmoke = (Math.random() - 0.5) * 0.3;
-    let deltaFlame = 0;
-
-    // Simulated Incident behavior tree
-    if (incidentStage === 1) { // Alert building up
-        deltaTemp = Math.random() * 2.5 + 0.5; // Rapid heating
-        deltaSmoke = Math.random() * 2.0 + 0.4; // Rapid smoke accumulation
-        if (sensors.temp.val > 40) {
-            deltaFlame = Math.random() * 0.15 + 0.05; // Fire ignites
-        }
-    } 
-    else if (incidentStage === 2) { // Critical peak
-        if (sprinklerActive) {
-            // Sprinkler cooling impact
-            deltaTemp = -Math.random() * 3.5 - 1.0; 
-            deltaSmoke = -Math.random() * 2.0 + 0.5; // Steam + lingering smoke
-            deltaFlame = -Math.random() * 0.25 - 0.1;
+        if (snap.val() === true) {
+            firebaseConnected = true;
+            if (espBadge) { espBadge.textContent = '● Connected'; espBadge.className = 'dev-badge dev-active'; }
+            if (wifiBadge) { wifiBadge.textContent = '● Connected'; wifiBadge.className = 'dev-badge dev-active'; }
+            addResponseActionLog('FIREBASE', 'Real-time database connection established.');
         } else {
-            deltaTemp = (Math.random() - 0.2) * 1.5;
-            deltaSmoke = (Math.random() - 0.2) * 1.0;
-            deltaFlame = (Math.random() - 0.2) * 0.1;
+            firebaseConnected = false;
+            if (espBadge) { espBadge.textContent = '● Disconnected'; espBadge.className = 'dev-badge dev-offline'; }
+            if (wifiBadge) { wifiBadge.textContent = '● Disconnected'; wifiBadge.className = 'dev-badge dev-offline'; }
         }
-    } 
-    else if (incidentStage === 3) { // Cooldown phase
-        deltaTemp = -Math.random() * 1.5 - 0.5;
-        deltaSmoke = -Math.random() * 1.0 - 0.5;
-        deltaFlame = -0.15;
-    }
+    });
 
-    // Apply adjustments
-    sensors.temp.val = Math.max(18.0, Math.min(120.0, sensors.temp.val + deltaTemp));
-    sensors.smoke.val = Math.max(5.0, Math.min(99.0, sensors.smoke.val + deltaSmoke));
-    sensors.flame.val = Math.max(0.0, Math.min(5.0, sensors.flame.val + deltaFlame));
+    // Listen for real-time sensor data updates
+    sensorRef.on('value', (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
 
-    // Handle stage escalation conditions
-    if (incidentStage === 1 && (sensors.temp.val >= thresholds.temp || sensors.smoke.val >= thresholds.smoke || sensors.flame.val >= thresholds.flame)) {
-        incidentStage = 2; // Hit critical escalation
-        addResponseActionLog('ESCALATION', 'Sensor thresholds breached. Automated sprinkler deployment triggered.');
-    }
-    
-    if (incidentStage === 2 && sprinklerActive && sensors.temp.val <= 32 && sensors.smoke.val <= 18 && sensors.flame.val <= 0.05) {
-        incidentStage = 3; // Threat neutralized, entering cooldown
-        addResponseActionLog('CONTAINMENT', 'Hazardous telemetry lowered below threshold. Auto cooldown active.');
-    }
+        // Map Firebase fields to dashboard sensors
+        // temperature → Temperature sensor (°C)
+        if (data.temperature !== undefined) {
+            sensors.temp.val = parseFloat(data.temperature);
+            sensors.temp.active = true;
+        }
 
-    if (incidentStage === 3 && sensors.temp.val <= 25.5 && sensors.smoke.val <= 13.0 && sensors.flame.val === 0) {
-        incidentStage = 0; // Back to normal
-        addResponseActionLog('NORMAL', 'Environmental baselines restored. System threat standing down.');
-    }
+        // gasValue → Smoke/Gas sensor (raw value from database)
+        if (data.gasValue !== undefined) {
+            sensors.smoke.val = parseFloat(data.gasValue);
+            sensors.smoke.active = true;
+        }
 
-    // Update Session Stat Envelopes
-    sensors.temp.peak = Math.max(sensors.temp.peak, sensors.temp.val);
-    sensors.temp.min = Math.min(sensors.temp.min, sensors.temp.val);
-    
-    sensors.smoke.peak = Math.max(sensors.smoke.peak, sensors.smoke.val);
-    sensors.smoke.min = Math.min(sensors.smoke.min, sensors.smoke.val);
-    
-    sensors.flame.peak = Math.max(sensors.flame.peak, sensors.flame.val);
-    sensors.flame.min = Math.min(sensors.flame.min, sensors.flame.val);
+        // flameState → Flame sensor (digital: 1 = no flame, 0 = flame detected)
+        if (data.flameState !== undefined) {
+            const flameDetected = (parseInt(data.flameState) === 0);
+            sensors.flame.val = flameDetected ? thresholds.flame : 0.0;
+            sensors.flame.active = true;
+        }
 
-    // Evaluate threats
-    evaluateSafetyThresholds();
+        // Update session peak/min envelopes
+        sensors.temp.peak = Math.max(sensors.temp.peak, sensors.temp.val);
+        sensors.temp.min = Math.min(sensors.temp.min, sensors.temp.val);
+        sensors.smoke.peak = Math.max(sensors.smoke.peak, sensors.smoke.val);
+        sensors.smoke.min = Math.min(sensors.smoke.min, sensors.smoke.val);
+        sensors.flame.peak = Math.max(sensors.flame.peak, sensors.flame.val);
+        sensors.flame.min = Math.min(sensors.flame.min, sensors.flame.val);
 
-    // Push new data to buffers
-    pushChartData();
+        // Update device health badges based on Firebase alert flags
+        updateDeviceHealthFromFirebase(data);
 
-    // Render numbers in GUI
-    updateInterfaceReadouts();
+        // Evaluate safety thresholds with new data
+        evaluateSafetyThresholds();
+
+        // Immediately update UI with fresh data
+        updateInterfaceReadouts();
+    });
 }
 
-// Simulates real-world sensor offline/waiting packets fluctuations
-function simulateJitterDeviceHealth() {
-    const rand = Math.random();
-    
-    const wifiBadge = document.getElementById('health-wifi-badge');
+// Update device health badges from Firebase alert flags
+function updateDeviceHealthFromFirebase(data) {
+    const tempBadge = document.getElementById('health-temp-badge');
+    const smokeBadge = document.getElementById('health-smoke-badge');
     const flameBadge = document.getElementById('health-flame-badge');
+    const pumpBadge = document.getElementById('health-pump-badge');
 
-    if (rand < 0.04) {
-        wifiBadge.textContent = '● Latency Jitter';
-        wifiBadge.className = 'dev-badge dev-waiting';
-        deviceHealth.wifi = 'Waiting';
-    } else if (rand < 0.08) {
-        wifiBadge.textContent = '● Connected';
-        wifiBadge.className = 'dev-badge dev-active';
-        deviceHealth.wifi = 'Connected';
+    // Temperature sensor status
+    if (tempBadge) {
+        tempBadge.textContent = '● Active';
+        tempBadge.className = 'dev-badge dev-active';
     }
+    document.getElementById('detail-temp-conn').textContent = '● ACTIVE';
+    document.getElementById('detail-temp-conn').style.color = 'var(--color-safe)';
 
-    if (systemState === 'CRITICAL') {
+    // Smoke/Gas sensor status
+    if (smokeBadge) {
+        smokeBadge.textContent = '● Active';
+        smokeBadge.className = 'dev-badge dev-active';
+    }
+    document.getElementById('detail-smoke-conn').textContent = '● ACTIVE';
+    document.getElementById('detail-smoke-conn').style.color = 'var(--color-safe)';
+
+    // Flame sensor status
+    if (flameBadge) {
         flameBadge.textContent = '● Active';
         flameBadge.className = 'dev-badge dev-active';
-        deviceHealth.flameSensor = 'Active';
-    } else if (rand > 0.98) {
-        flameBadge.textContent = '● Offline';
-        flameBadge.className = 'dev-badge dev-offline';
-        deviceHealth.flameSensor = 'Offline';
-        sensors.flame.active = false;
-        document.getElementById('detail-flame-conn').textContent = '● OFFLINE';
-        document.getElementById('detail-flame-conn').style.color = 'var(--color-critical)';
-    } else if (rand > 0.92) {
-        flameBadge.textContent = '● Active';
-        flameBadge.className = 'dev-badge dev-active';
-        deviceHealth.flameSensor = 'Active';
-        sensors.flame.active = true;
-        document.getElementById('detail-flame-conn').textContent = '● ACTIVE';
-        document.getElementById('detail-flame-conn').style.color = 'var(--color-safe)';
     }
+    document.getElementById('detail-flame-conn').textContent = '● ACTIVE';
+    document.getElementById('detail-flame-conn').style.color = 'var(--color-safe)';
+
+    // Buzzer / Pump status from Firebase
+    if (pumpBadge) {
+        if (data.buzzer === true) {
+            pumpBadge.textContent = '● ACTIVE';
+            pumpBadge.className = 'dev-badge dev-offline'; // red = active alert
+        } else {
+            pumpBadge.textContent = '● Ready';
+            pumpBadge.className = 'dev-badge dev-active';
+        }
+    }
+}
+
+// UI Refresh Loop — pushes chart data at regular intervals
+function uiRefreshLoop() {
+    pushChartData();
+    updateInterfaceReadouts();
 }
 
 // Evaluate values against configured warning and alarm values
@@ -1021,7 +883,7 @@ function addResponseActionLog(type, details) {
 
 // Fire Incident History Database Manager (LocalStorage/Firebase-backed)
 function seedIncidentsHistory() {
-    let incidents = firebaseDb.ref('fire_incidents').get();
+    let incidents = incidentStore.get();
     if (incidents.length === 0) {
         incidents = [
             {
@@ -1039,7 +901,7 @@ function seedIncidentsHistory() {
                 status: 'Alert Sent Successfully'
             }
         ];
-        firebaseDb.ref('fire_incidents').set(incidents);
+        incidentStore.set(incidents);
     }
 }
 
@@ -1082,8 +944,8 @@ function recordFireIncident() {
         status: 'Alert Sent Successfully'
     };
 
-    // Store in LocalStorage (simulated Firebase)
-    firebaseDb.ref('fire_incidents').push(incident);
+    // Store in LocalStorage
+    incidentStore.push(incident);
 
     // Re-render History view
     renderIncidentsHistory();
@@ -1095,7 +957,7 @@ function renderIncidentsHistory() {
 
     container.innerHTML = '';
 
-    const incidents = firebaseDb.ref('fire_incidents').get();
+    const incidents = incidentStore.get();
 
     if (incidents.length === 0) {
         container.innerHTML = `
