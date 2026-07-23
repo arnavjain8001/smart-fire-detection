@@ -6,7 +6,7 @@ export default function EmergencyBanner({ active }) {
   return (
     <div className="emergency-banner-container">
       <div className="emergency-banner" role="alert" aria-live="assertive">
-        🚨 EMERGENCY • FIRE DETECTED • EVACUATE IMMEDIATELY
+        🚨 EMERGENCY MODE ACTIVE • Fire has not yet been cleared. Live monitoring is running.
       </div>
     </div>
   );

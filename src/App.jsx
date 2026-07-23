@@ -1,36 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue } from 'firebase/database';
-import { ENV } from './config';
+import { sensorService } from './services/sensorService';
+import { supabase } from './lib/supabase';
 import { audioService } from './services/AudioService';
 import { notificationService } from './services/NotificationService';
 import EmergencyPopup from './components/EmergencyPopup';
 import EmergencyBanner from './components/EmergencyBanner';
-
-// Initialize Firebase
-const firebaseApp = initializeApp({
-  apiKey: ENV.FIREBASE_API_KEY,
-  authDomain: ENV.FIREBASE_AUTH_DOMAIN,
-  databaseURL: ENV.FIREBASE_DATABASE_URL,
-  projectId: ENV.FIREBASE_PROJECT_ID,
-  storageBucket: ENV.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: ENV.FIREBASE_MESSAGING_SENDER_ID,
-  appId: ENV.FIREBASE_APP_ID,
-  measurementId: ENV.FIREBASE_MEASUREMENT_ID
-});
-
-const database = getDatabase(firebaseApp);
 
 export default function App() {
   // System states
   const [systemState, setSystemState] = useState('SAFE'); // SAFE, WARNING, CRITICAL
   const [currentTab, setCurrentTab] = useState('dashboard');
   
-  // Firebase Live Alarm states
-  const [firebaseFireStatus, setFirebaseFireStatus] = useState(false);
-  const [firebaseFireSeverity, setFirebaseFireSeverity] = useState('CRITICAL');
-  const [firebaseConnected, setFirebaseConnected] = useState(false);
+  // Supabase Live Alarm states
+  const [supabaseFireStatus, setSupabaseFireStatus] = useState(false);
+  const [supabaseFireSeverity, setSupabaseFireSeverity] = useState('CRITICAL');
+  const [supabaseConnected, setSupabaseConnected] = useState(false);
+
+  // Backend health status states
+  const [backendHealth, setBackendHealth] = useState({
+    deviceOnline: false,
+    temperatureSensor: false,
+    smokeSensor: false,
+    flameSensor: false,
+    wifiConnected: false,
+    pumpStatus: false,
+    cameraStatus: 'offline'
+  });
+  const [secondsSinceLastHeartbeat, setSecondsSinceLastHeartbeat] = useState(null);
+  const lastHeartbeatTimeRef = useRef(null);
+  const prevTimestampRef = useRef(null);
 
   // Manual & Auto Controls
   const [autoMode, setAutoMode] = useState(true);
@@ -39,6 +38,12 @@ export default function App() {
 
   // Emergency Popup manual dismiss flag
   const [alertDismissed, setAlertDismissed] = useState(false);
+
+  // Live Camera states
+  const [cameraStatus, setCameraStatus] = useState('OFFLINE');
+  const [liveStreamUrl, setLiveStreamUrl] = useState('');
+  const [cameraState, setCameraState] = useState('Offline'); // Offline, Starting, Connecting, Live, Disconnected
+  const [lastUpdateTime, setLastUpdateTime] = useState('');
 
   // Live telemetry values
   const [sensors, setSensors] = useState({
@@ -75,6 +80,9 @@ export default function App() {
   // Diagnostic tests
   const [incidentStage, setIncidentStage] = useState(0);
 
+  // Timeline filter state
+  const [timelineFilter, setTimelineFilter] = useState('all');
+
   // Canvas and Chart Refs
   const mainCanvasRef = useRef(null);
   const tempCanvasRef = useRef(null);
@@ -101,8 +109,8 @@ export default function App() {
   const emergencyOverrideRef = useRef(emergencyOverride);
   const deviceHealthRef = useRef(deviceHealth);
   const systemStateRef = useRef(systemState);
-  const firebaseFireStatusRef = useRef(firebaseFireStatus);
-  const firebaseFireSeverityRef = useRef(firebaseFireSeverity);
+  const supabaseFireStatusRef = useRef(supabaseFireStatus);
+  const supabaseFireSeverityRef = useRef(supabaseFireSeverity);
   const lastFireActiveRef = useRef(false);
 
   useEffect(() => { sensorsRef.current = sensors; }, [sensors]);
@@ -112,12 +120,33 @@ export default function App() {
   useEffect(() => { emergencyOverrideRef.current = emergencyOverride; }, [emergencyOverride]);
   useEffect(() => { deviceHealthRef.current = deviceHealth; }, [deviceHealth]);
   useEffect(() => { systemStateRef.current = systemState; }, [systemState]);
-  useEffect(() => { firebaseFireStatusRef.current = firebaseFireStatus; }, [firebaseFireStatus]);
-  useEffect(() => { firebaseFireSeverityRef.current = firebaseFireSeverity; }, [firebaseFireSeverity]);
+  useEffect(() => { supabaseFireStatusRef.current = supabaseFireStatus; }, [supabaseFireStatus]);
+  useEffect(() => { supabaseFireSeverityRef.current = supabaseFireSeverity; }, [supabaseFireSeverity]);
 
   // Overall Emergency State computed
-  const isFireActive = firebaseFireStatus || emergencyOverride || (systemState === 'CRITICAL');
-  const activeSeverity = firebaseFireStatus ? firebaseFireSeverity : 'CRITICAL';
+  const isFireActive = supabaseFireStatus || emergencyOverride || (systemState === 'CRITICAL');
+  const activeSeverity = supabaseFireStatus ? supabaseFireSeverity : 'CRITICAL';
+
+  // Buzzer Active computation (placed after all states to prevent ReferenceError)
+  const isBuzzerActive = deviceHealth.pump === 'Active Alert' || sprinklerActive;
+  const isCameraPanelVisible = isFireActive && isBuzzerActive;
+
+  useEffect(() => {
+    if (isCameraPanelVisible) {
+      if (cameraState === 'Offline') {
+        setCameraState('Starting');
+      } else if (liveStreamUrl && cameraState === 'Starting') {
+        setCameraState('Connecting');
+        const timer = setTimeout(() => {
+          setCameraState('Live');
+        }, 1500);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      setCameraState('Offline');
+      setLiveStreamUrl('');
+    }
+  }, [isCameraPanelVisible, cameraState, liveStreamUrl]);
 
   // Seed incidents from local storage
   useEffect(() => {
@@ -339,115 +368,170 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Firebase Real-time DB Listener
+  const handleTelemetryUpdate = (data) => {
+    if (!data) return;
+
+    // Extract Fire Status & Severity
+    const fStatus = data.fireStatus === true;
+    const fSeverity = data.fireSeverity || 'CRITICAL';
+    setSupabaseFireStatus(fStatus);
+    setSupabaseFireSeverity(fSeverity);
+
+    // Extract values
+    const tempVal = data.temperature !== undefined ? data.temperature : sensorsRef.current.temp.val;
+    const smokeVal = data.gasValue !== undefined ? data.gasValue : sensorsRef.current.smoke.val;
+    const flameDetected = data.flameState !== undefined && parseInt(data.flameState) === 0;
+    const flameVal = flameDetected ? thresholds.flame : 0.0;
+
+    // Evaluate sensor status warnings/alarms
+    let tempStatus = 'SAFE';
+    if (tempVal >= thresholds.temp) tempStatus = 'CRITICAL';
+    else if (tempVal >= thresholds.temp * 0.75) tempStatus = 'WARNING';
+
+    let smokeStatus = 'SAFE';
+    if (smokeVal >= thresholds.smoke) smokeStatus = 'CRITICAL';
+    else if (smokeVal >= thresholds.smoke * 0.75) smokeStatus = 'WARNING';
+
+    let flameStatus = 'SAFE';
+    if (flameVal >= thresholds.flame) flameStatus = 'CRITICAL';
+    else if (flameVal >= thresholds.flame * 0.5) flameStatus = 'WARNING';
+
+    // Overall System state calculation
+    let maxSeverity = 'SAFE';
+    if (tempStatus === 'CRITICAL' || smokeStatus === 'CRITICAL' || flameStatus === 'CRITICAL') {
+      maxSeverity = 'CRITICAL';
+    } else if (tempStatus === 'WARNING' || smokeStatus === 'WARNING' || flameStatus === 'WARNING') {
+      maxSeverity = 'WARNING';
+    }
+
+    if (emergencyOverrideRef.current) {
+      maxSeverity = 'CRITICAL';
+    }
+
+    // Check transition
+    if (maxSeverity !== systemStateRef.current) {
+      triggerStateTransitionLogs(systemStateRef.current, maxSeverity, tempVal, smokeVal, flameVal);
+    }
+
+    setSystemState(maxSeverity);
+
+    // Evaluate Auto-Action mode
+    if (maxSeverity === 'CRITICAL' && autoModeRef.current && !sprinklerActiveRef.current) {
+      setSprinklerActive(true);
+      addResponseActionLog('ACTUATOR-ON', 'Sprinklers activated via AUTO-RESPONSE protocols.');
+    }
+
+    // Update sensors state
+    setSensors((prev) => ({
+      temp: { val: tempVal, peak: Math.max(prev.temp.peak, tempVal), min: Math.min(prev.temp.min, tempVal), status: tempStatus, active: true },
+      smoke: { val: smokeVal, peak: Math.max(prev.smoke.peak, smokeVal), min: Math.min(prev.smoke.min, smokeVal), status: smokeStatus, active: true },
+      flame: { val: flameVal, peak: Math.max(prev.flame.peak, flameVal), min: Math.min(prev.flame.min, flameVal), status: flameStatus, active: true }
+    }));
+
+    // Update backendHealth status variables from Supabase
+    setBackendHealth({
+      deviceOnline: data.deviceOnline ?? false,
+      temperatureSensor: data.temperatureSensor ?? false,
+      smokeSensor: data.smokeSensor ?? false,
+      flameSensor: data.flameSensor ?? false,
+      wifiConnected: data.wifiConnected ?? false,
+      pumpStatus: data.pumpStatus ?? false,
+      cameraStatus: data.cameraStatus ?? 'offline'
+    });
+
+    // Heartbeat timestamp logic:
+    if (data.timestamp !== undefined && data.timestamp !== null) {
+      if (data.timestamp !== prevTimestampRef.current) {
+        prevTimestampRef.current = data.timestamp;
+        lastHeartbeatTimeRef.current = Date.now();
+      }
+    } else if (data.deviceOnline === true && lastHeartbeatTimeRef.current === null) {
+      lastHeartbeatTimeRef.current = Date.now();
+    }
+
+    // Sync cameraStatus state
+    if (data.cameraStatus !== undefined) {
+      setCameraStatus(data.cameraStatus.toUpperCase());
+    }
+
+    // Sync legacy pump health badge
+    setDeviceHealth((prev) => {
+      const next = { ...prev };
+      if (data.buzzer === true) {
+        next.pump = 'Active Alert';
+      } else if (sprinklerActiveRef.current) {
+        next.pump = 'Active';
+      } else {
+        next.pump = 'Ready';
+      }
+      return next;
+    });
+
+    // Sync camera stream URL
+    if (data.cameraStreamUrl) {
+      setLiveStreamUrl(data.cameraStreamUrl);
+    }
+
+    // Update last seen timestamp
+    if (data.lastSeen) {
+      setLastUpdateTime(new Date(data.lastSeen).toLocaleTimeString());
+    } else if (data.timestamp) {
+      setLastUpdateTime(new Date(data.timestamp).toLocaleTimeString());
+    } else {
+      setLastUpdateTime(new Date().toLocaleTimeString());
+    }
+  };
+
+  // Supabase Real-time DB Listener
   useEffect(() => {
-    const sensorDataRef = ref(database, 'sensorData');
-    
-    // Connected monitor
-    const connectedRef = ref(database, '.info/connected');
-    const unsubscribeConnected = onValue(connectedRef, (snap) => {
-      const isConnected = snap.val() === true;
-      setFirebaseConnected(isConnected);
-      setDeviceHealth((prev) => {
-        const next = { ...prev };
-        if (isConnected) {
-          next.esp32 = 'Connected';
-          next.wifi = 'Connected';
-          addResponseActionLog('FIREBASE', 'Real-time database connection established.');
-        } else {
-          next.esp32 = 'Disconnected';
-          next.wifi = 'Disconnected';
+    // 1. Fetch initial telemetry
+    const fetchInitial = async () => {
+      try {
+        const data = await sensorService.getLatestTelemetry();
+        if (data) {
+          handleTelemetryUpdate(data);
         }
-        return next;
-      });
-    });
-
-    // Sensor updates monitor
-    const unsubscribeSensors = onValue(sensorDataRef, (snapshot) => {
-      const data = snapshot.val();
-      if (!data) return;
-
-      // Extract Fire Status & Severity
-      let fStatus = false;
-      if (data.fireStatus !== undefined) {
-        fStatus = (data.fireStatus === true || data.fireStatus === 'true' || data.fireStatus === 1 || data.fireStatus === '1' || data.fireStatus === 'TRUE');
+      } catch (err) {
+        console.error("Failed to fetch initial telemetry:", err);
       }
-      
-      const fSeverity = data.fireSeverity || 'CRITICAL';
-      setFirebaseFireStatus(fStatus);
-      setFirebaseFireSeverity(fSeverity);
+    };
+    fetchInitial();
 
-      // Extract values
-      const tempVal = data.temperature !== undefined ? parseFloat(data.temperature) : sensorsRef.current.temp.val;
-      const smokeVal = data.gasValue !== undefined ? parseFloat(data.gasValue) : sensorsRef.current.smoke.val;
-      const flameDetected = data.flameState !== undefined && parseInt(data.flameState) === 0;
-      const flameVal = flameDetected ? thresholds.flame : 0.0;
-
-      // Evaluate sensor status warnings/alarms
-      let tempStatus = 'SAFE';
-      if (tempVal >= thresholds.temp) tempStatus = 'CRITICAL';
-      else if (tempVal >= thresholds.temp * 0.75) tempStatus = 'WARNING';
-
-      let smokeStatus = 'SAFE';
-      if (smokeVal >= thresholds.smoke) smokeStatus = 'CRITICAL';
-      else if (smokeVal >= thresholds.smoke * 0.75) smokeStatus = 'WARNING';
-
-      let flameStatus = 'SAFE';
-      if (flameVal >= thresholds.flame) flameStatus = 'CRITICAL';
-      else if (flameVal >= thresholds.flame * 0.5) flameStatus = 'WARNING';
-
-      // Overall System state calculation
-      let maxSeverity = 'SAFE';
-      if (tempStatus === 'CRITICAL' || smokeStatus === 'CRITICAL' || flameStatus === 'CRITICAL') {
-        maxSeverity = 'CRITICAL';
-      } else if (tempStatus === 'WARNING' || smokeStatus === 'WARNING' || flameStatus === 'WARNING') {
-        maxSeverity = 'WARNING';
-      }
-
-      if (emergencyOverrideRef.current) {
-        maxSeverity = 'CRITICAL';
-      }
-
-      // Check transition
-      if (maxSeverity !== systemStateRef.current) {
-        triggerStateTransitionLogs(systemStateRef.current, maxSeverity, tempVal, smokeVal, flameVal);
-      }
-
-      setSystemState(maxSeverity);
-
-      // Evaluate Auto-Action mode
-      if (maxSeverity === 'CRITICAL' && autoModeRef.current && !sprinklerActiveRef.current) {
-        setSprinklerActive(true);
-        addResponseActionLog('ACTUATOR-ON', 'Sprinklers activated via AUTO-RESPONSE protocols.');
-        createTimelineAlert('SPRINKLERS ENGAGED', 'Water discharge commenced via AUTO-RESPONSE protocols.', 'info', 'All Sectors - Ceilings');
-      }
-
-      // Update sensors state
-      setSensors((prev) => ({
-        temp: { val: tempVal, peak: Math.max(prev.temp.peak, tempVal), min: Math.min(prev.temp.min, tempVal), status: tempStatus, active: true },
-        smoke: { val: smokeVal, peak: Math.max(prev.smoke.peak, smokeVal), min: Math.min(prev.smoke.min, smokeVal), status: smokeStatus, active: true },
-        flame: { val: flameVal, peak: Math.max(prev.flame.peak, flameVal), min: Math.min(prev.flame.min, flameVal), status: flameStatus, active: true }
-      }));
-
-      // Sync Health badges
-      setDeviceHealth((prev) => {
-        const next = { ...prev };
-        if (data.buzzer === true) {
-          next.pump = 'Active Alert';
-        } else if (sprinklerActiveRef.current) {
-          next.pump = 'Active';
-        } else {
-          next.pump = 'Ready';
+    // 2. Subscribe to real-time updates
+    const unsubscribe = sensorService.subscribeToTelemetry(
+      (data) => {
+        handleTelemetryUpdate(data);
+      },
+      (status) => {
+        if (status === 'SUBSCRIBED') {
+          setSupabaseConnected(true);
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+          setSupabaseConnected(false);
         }
-        return next;
-      });
-    });
+      }
+    );
 
     return () => {
-      unsubscribeConnected();
-      unsubscribeSensors();
+      unsubscribe();
     };
   }, []);
+
+  // ESP32 Heartbeat monitor
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (lastHeartbeatTimeRef.current !== null) {
+        const diff = Math.max(0, Math.round((Date.now() - lastHeartbeatTimeRef.current) / 1000));
+        setSecondsSinceLastHeartbeat(diff);
+      } else {
+        setSecondsSinceLastHeartbeat(null);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const isEsp32Connected = backendHealth.deviceOnline &&
+                           secondsSinceLastHeartbeat !== null &&
+                           secondsSinceLastHeartbeat <= 15;
 
   // Monitor Emergency Alert system behaviors
   useEffect(() => {
@@ -634,8 +718,8 @@ export default function App() {
     setEmergencyOverride(false);
     setSprinklerActive(false);
     setAlertDismissed(false);
-    setFirebaseFireStatus(false);
-    setFirebaseFireSeverity('CRITICAL');
+    setSupabaseFireStatus(false);
+    setSupabaseFireSeverity('CRITICAL');
 
     setSensors({
       temp: { val: 24.5, peak: 24.5, min: 24.5, status: 'SAFE', active: true },
@@ -845,31 +929,6 @@ export default function App() {
                   </button>
                 </div>
               </div>
-
-              {/* Local Controls Panel */}
-              <div className="glass-panel">
-                <div className="panel-title">🔧 Automatic Controls & Override</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', width: '100%' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Auto Fire Defense Mode</span>
-                    <label className="switch">
-                      <input type="checkbox" checked={autoMode} onChange={toggleAutoMode} />
-                      <span className="slider round"></span>
-                    </label>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Actuator Sprinkler Pump</span>
-                    <label className="switch">
-                      <input type="checkbox" checked={sprinklerActive} onChange={toggleSprinkler} />
-                      <span className="slider round"></span>
-                    </label>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                    <button className="btn-secondary" onClick={runDiagnosticTest} style={{ flex: 1, margin: 0 }}>🧪 Diagnostics Test</button>
-                    <button className="btn-secondary" onClick={resetEntireSystem} style={{ flex: 1, margin: 0 }}>🔄 Reset System</button>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Center Panel (Mini cards & charts) */}
@@ -921,6 +980,63 @@ export default function App() {
                     <span className="sensor-mini-trend-indicator" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Stable</span>
                   </div>
                 </div>
+
+                {/* Fire Status */}
+                <div className={`glass-panel sensor-mini-card ${isFireActive ? 'glow-fire' : ''}`} id="mini-fire-card">
+                  <div className="sensor-mini-title">
+                    <span>🔥 Fire Status</span>
+                    <span className="sensor-spark-sparkle" style={{ color: 'var(--color-critical)' }}>●</span>
+                  </div>
+                  <div className="sensor-mini-val-container">
+                    <span className="sensor-mini-val" id="mini-fire" style={{ fontSize: '1.45rem' }}>
+                      {isFireActive ? 'Fire Detected' : 'No Active Emergency'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <span className={`sensor-mini-status ${isFireActive ? 'critical' : 'safe'}`} id="mini-fire-status">
+                      {isFireActive ? 'CRITICAL' : 'NORMAL'}
+                    </span>
+                    <span className="sensor-mini-trend-indicator" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Continuous</span>
+                  </div>
+                </div>
+
+                {/* Buzzer Status */}
+                <div className="glass-panel sensor-mini-card" id="mini-buzzer-card">
+                  <div className="sensor-mini-title">
+                    <span>🔊 Buzzer Status</span>
+                    <span className="sensor-spark-sparkle" style={{ color: 'var(--color-accent)' }}>●</span>
+                  </div>
+                  <div className="sensor-mini-val-container">
+                    <span className="sensor-mini-val" id="mini-buzzer" style={{ fontSize: '1.45rem' }}>
+                      {isBuzzerActive ? 'ACTIVE' : (supabaseConnected ? 'Ready' : 'Offline')}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <span className={`sensor-mini-status ${isBuzzerActive ? 'critical' : (supabaseConnected ? 'safe' : 'offline')}`} id="mini-buzzer-status">
+                      {isBuzzerActive ? 'ACTIVE' : (supabaseConnected ? 'READY' : 'OFFLINE')}
+                    </span>
+                    <span className="sensor-mini-trend-indicator" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Actuator</span>
+                  </div>
+                </div>
+
+                {/* Camera Status */}
+                <div className="glass-panel sensor-mini-card" id="mini-camera-card">
+                  <div className="sensor-mini-title">
+                    <span>📷 Camera Status</span>
+                    <span className="sensor-spark-sparkle" style={{ color: 'var(--color-warn)' }}>●</span>
+                  </div>
+                  <div className="sensor-mini-val-container">
+                    <span className="sensor-mini-val" id="mini-camera" style={{ fontSize: '1.45rem' }}>
+                      {cameraState === 'Live' ? 'Live' : cameraState === 'Starting' ? 'Starting...' : cameraState === 'Connecting' ? 'Connecting...' : 'Offline'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                    <span className={`sensor-mini-status ${cameraState.toLowerCase()}`} id="mini-camera-status">
+                      {cameraState.toUpperCase()}
+                    </span>
+                    <span className="sensor-mini-trend-indicator" style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>CCTV Stream</span>
+                  </div>
+                </div>
               </div>
 
               {/* Graph Card */}
@@ -937,6 +1053,137 @@ export default function App() {
                   <canvas ref={mainCanvasRef} id="multiSensorChart"></canvas>
                 </div>
               </div>
+
+              {/* Live Camera Monitoring Panel */}
+              {isCameraPanelVisible && (
+                <div className="glass-panel" style={{ marginTop: 'var(--grid-gap)', display: 'flex', flexDirection: 'column' }}>
+                  <div className="panel-title" style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '4px' }}>
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                      </svg>
+                      LIVE CAMERA
+                    </div>
+                    {cameraState === 'Live' && (
+                      <span className="status-indicator" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '2px 8px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span className="status-dot" style={{ background: '#ef4444', margin: 0 }}></span>
+                        <span style={{ color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' }}>LIVE</span>
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="camera-monitoring-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--grid-gap)', padding: 0 }}>
+                    {/* Left: Stream View Container */}
+                    <div style={{ background: '#000', borderRadius: '10px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '240px', position: 'relative', border: '1px solid var(--border-color)' }}>
+                      {(cameraState === 'Starting' || cameraState === 'Connecting') && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', color: '#fffa' }}>
+                          <div className="camera-spinner"></div>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}>
+                            {cameraState === 'Starting' ? 'Starting Live Monitoring...' : 'Connecting to Stream...'}
+                          </span>
+                        </div>
+                      )}
+                      
+                      {cameraState === 'Live' && liveStreamUrl && (
+                        <>
+                          <img 
+                            src={liveStreamUrl} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            alt="Live ESP32-CAM Feed"
+                            onError={(e) => {
+                              console.error("Camera stream URL load error:", liveStreamUrl);
+                              setCameraState('Disconnected');
+                            }}
+                          />
+                          <div style={{ position: 'absolute', top: '10px', left: '10px', background: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px', color: '#fff', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                            REC ●
+                          </div>
+                          <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.6)', padding: '2px 6px', borderRadius: '4px', color: '#fff', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                            CH-01
+                          </div>
+                        </>
+                      )}
+
+                      {cameraState === 'Disconnected' && (
+                        <div style={{ color: 'var(--color-critical)', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                          ⚠️ Stream Connection Failed
+                        </div>
+                      )}
+
+                      {cameraState === 'Offline' && (
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', fontStyle: 'italic' }}>
+                          Camera Offline
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Right: Telemetry Metadata */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Camera Status:</span>
+                        <span className="cell-mono" style={{ fontWeight: 'bold', fontSize: '0.85rem', color: cameraState === 'Live' ? 'var(--color-safe)' : 'var(--color-warn)' }}>
+                          {cameraState}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Connection Status:</span>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: supabaseConnected ? 'var(--color-safe)' : 'var(--color-critical)' }}>
+                          {supabaseConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Fire Status:</span>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isFireActive ? 'var(--color-critical)' : 'var(--color-safe)' }}>
+                          {isFireActive ? 'TRUE' : 'FALSE'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Buzzer Status:</span>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuzzerActive ? 'var(--color-critical)' : 'var(--color-safe)' }}>
+                          {isBuzzerActive ? 'ON' : 'OFF'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Temperature:</span>
+                        <span className="cell-mono" style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          {sensors.temp.val.toFixed(1)}°C
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Smoke:</span>
+                        <span className="cell-mono" style={{ fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          {sensors.smoke.val.toFixed(0)}%
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Flame:</span>
+                        <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: sensors.flame.val >= thresholds.flame ? 'var(--color-critical)' : 'var(--color-safe)' }}>
+                          {sensors.flame.val >= thresholds.flame ? 'Detected' : 'Normal'}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.3rem' }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Fire Severity:</span>
+                        <span className="cell-mono" style={{ fontWeight: 'bold', fontSize: '0.85rem', color: 'var(--color-critical)' }}>
+                          {activeSeverity}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                        <span style={{ color: 'var(--text-muted)' }}>Last Updated Time:</span>
+                        <span className="cell-mono" style={{ fontWeight: 'bold' }}>{lastUpdateTime || 'N/A'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Right Panel (Health & logs) */}
@@ -954,32 +1201,39 @@ export default function App() {
                 <div className="device-status-list">
                   <div className="dev-status-item">
                     <span>Temperature Sensor</span>
-                    <span className="dev-badge dev-active" id="health-temp-badge">● Active</span>
+                    <span className={`dev-badge ${backendHealth.temperatureSensor ? 'dev-active' : 'dev-offline'}`} id="health-temp-badge">
+                      {backendHealth.temperatureSensor ? '● Active' : '● Inactive'}
+                    </span>
                   </div>
                   <div className="dev-status-item">
                     <span>Smoke Sensor</span>
-                    <span className="dev-badge dev-active" id="health-smoke-badge">● Active</span>
+                    <span className={`dev-badge ${backendHealth.smokeSensor ? 'dev-active' : 'dev-offline'}`} id="health-smoke-badge">
+                      {backendHealth.smokeSensor ? '● Active' : '● Inactive'}
+                    </span>
                   </div>
                   <div className="dev-status-item">
                     <span>Flame Sensor</span>
-                    <span className="dev-badge dev-active" id="health-flame-badge">● Active</span>
+                    <span className={`dev-badge ${backendHealth.flameSensor ? 'dev-active' : 'dev-offline'}`} id="health-flame-badge">
+                      {backendHealth.flameSensor ? '● Active' : '● Inactive'}
+                    </span>
                   </div>
                   <div className="dev-status-item">
-                    <span>ESP32 Control Board</span>
-                    <span className={`dev-badge ${firebaseConnected ? 'dev-active' : 'dev-offline'}`} id="health-esp32-badge">
-                      {firebaseConnected ? '● Connected' : '● Disconnected'}
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <span>ESP32 Control Board</span>
+                      {secondsSinceLastHeartbeat !== null && (
+                        <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          Last Seen: {secondsSinceLastHeartbeat}s ago
+                        </span>
+                      )}
+                    </div>
+                    <span className={`dev-badge ${isEsp32Connected ? 'dev-active' : 'dev-offline'}`} id="health-esp32-badge">
+                      {isEsp32Connected ? '● Connected' : '● Disconnected'}
                     </span>
                   </div>
                   <div className="dev-status-item">
                     <span>Wi-Fi Network Module</span>
-                    <span className={`dev-badge ${firebaseConnected ? 'dev-active' : 'dev-offline'}`} id="health-wifi-badge">
-                      {firebaseConnected ? '● Connected' : '● Disconnected'}
-                    </span>
-                  </div>
-                  <div className="dev-status-item">
-                    <span>Water Pump Actuator</span>
-                    <span className={`dev-badge ${sprinklerActive ? 'dev-offline' : 'dev-active'}`} id="health-pump-badge">
-                      {sprinklerActive ? '● ACTIVE' : '● Ready'}
+                    <span className={`dev-badge ${backendHealth.wifiConnected ? 'dev-active' : 'dev-offline'}`} id="health-wifi-badge">
+                      {backendHealth.wifiConnected ? '● Connected' : '● Disconnected'}
                     </span>
                   </div>
                 </div>
